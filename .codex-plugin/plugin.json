@@ -1,0 +1,20 @@
+{
+  "name": "cutepower",
+  "version": "0.1.0",
+  "description": "P0 governance plugin for the Agent Workflow three-side loop, built around plugin-first runtime assets and structured governance contracts.",
+  "author": {
+    "name": "Jichao"
+  },
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "cutepower",
+    "shortDescription": "P0 contracts-first governance plugin for Agent Workflow.",
+    "developerName": "Jichao",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ]
+  }
+}

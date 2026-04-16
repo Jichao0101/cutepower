@@ -1,0 +1,46 @@
+{
+  "schema": "cutepower.contract-index/v1",
+  "plugin": "cutepower",
+  "contracts": [
+    {
+      "id": "gate-matrix",
+      "path": "contracts/gate-matrix.yaml",
+      "schema_path": "schemas/gate-matrix.schema.json",
+      "version": "0.1.0",
+      "status": "active",
+      "precedence": 10
+    },
+    {
+      "id": "role-contracts",
+      "path": "contracts/role-contracts.yaml",
+      "schema_path": "schemas/role-contracts.schema.json",
+      "version": "0.1.0",
+      "status": "active",
+      "precedence": 20
+    },
+    {
+      "id": "review-boundaries",
+      "path": "contracts/review-boundaries.yaml",
+      "schema_path": "schemas/review-boundaries.schema.json",
+      "version": "0.1.0",
+      "status": "active",
+      "precedence": 30
+    },
+    {
+      "id": "writeback-levels",
+      "path": "contracts/writeback-levels.yaml",
+      "schema_path": "schemas/writeback-levels.schema.json",
+      "version": "0.1.0",
+      "status": "active",
+      "precedence": 40
+    },
+    {
+      "id": "routing-table",
+      "path": "contracts/routing-table.yaml",
+      "schema_path": "schemas/routing-table.schema.json",
+      "version": "0.1.0",
+      "status": "active",
+      "precedence": 50
+    }
+  ]
+}

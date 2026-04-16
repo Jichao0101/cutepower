@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema": "cutepower.overlay-schema/v1",
+  "title": "cutepower overlay schema",
+  "type": "object",
+  "required": ["schema", "allowed_fields", "restrict_only_fields", "forbidden_fields"],
+  "allowed_fields": [
+    "allowed_paths",
+    "repo_scope",
+    "verification_tier",
+    "available_skills",
+    "route_restrictions",
+    "writeback_targets"
+  ],
+  "restrict_only_fields": [
+    "allowed_paths",
+    "repo_scope",
+    "verification_tier",
+    "available_skills",
+    "route_restrictions",
+    "writeback_targets"
+  ],
+  "forbidden_fields": [
+    "states",
+    "actions",
+    "roles",
+    "gates",
+    "reviewer_cannot",
+    "writeback_levels"
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "schema": "cutepower.routing-table/v1",
+  "routes": [
+    {
+      "route_id": "implementation_default",
+      "primary_type": "implementation",
+      "modifiers": [
+        "code_change_allowed",
+        "review_required"
+      ],
+      "entry_skill": "using-cutepower",
+      "skill_chain": [
+        "cute-scope-plan",
+        "cute-repo-change",
+        "cute-code-review",
+        "cute-writeback"
+      ],
+      "required_roles": [
+        "knowledge-planner",
+        "repo-coder",
+        "reviewer"
+      ],
+      "required_gates": [
+        "analysis",
+        "implementation",
+        "review",
+        "writeback"
+      ],
+      "writeback_level": "project_current_update"
+    },
+    {
+      "route_id": "bug_fix_default",
+      "primary_type": "bug_fix",
+      "modifiers": [
+        "code_change_allowed",
+        "review_required"
+      ],
+      "entry_skill": "using-cutepower",
+      "skill_chain": [
+        "cute-scope-plan",
+        "cute-repo-change",
+        "cute-code-review",
+        "cute-writeback"
+      ],
+      "required_roles": [
+        "knowledge-planner",
+        "repo-coder",
+        "reviewer"
+      ],
+      "required_gates": [
+        "analysis",
+        "implementation",
+        "review",
+        "writeback"
+      ],
+      "writeback_level": "project_current_update"
+    },
+    {
+      "route_id": "knowledge_task_read_only",
+      "primary_type": "knowledge_task",
+      "modifiers": [
+        "read_only"
+      ],
+      "entry_skill": "using-cutepower",
+      "skill_chain": [
+        "cute-scope-plan"
+      ],
+      "required_roles": [
+        "knowledge-planner"
+      ],
+      "required_gates": [
+        "analysis"
+      ],
+      "writeback_level": "project_log_write"
+    }
+  ]
+}

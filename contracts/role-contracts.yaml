@@ -1,0 +1,87 @@
+{
+  "schema": "cutepower.role-contracts/v1",
+  "roles": [
+    {
+      "role_id": "workflow-orchestrator",
+      "allowed_actions": [
+        "verification_read",
+        "project_log_write"
+      ],
+      "required_inputs": [
+        "task_goal",
+        "primary_type",
+        "task_modifiers",
+        "allowed_paths",
+        "verification_tier"
+      ],
+      "required_outputs": [
+        "roles_invoked",
+        "state_transitions",
+        "audit_summary"
+      ],
+      "stop_conditions": [
+        "missing_allowed_paths",
+        "missing_primary_type"
+      ]
+    },
+    {
+      "role_id": "knowledge-planner",
+      "allowed_actions": [
+        "verification_read",
+        "project_log_write"
+      ],
+      "required_inputs": [
+        "task_goal",
+        "allowed_paths"
+      ],
+      "required_outputs": [
+        "implementation_plan",
+        "verification_plan",
+        "open_uncertainties"
+      ],
+      "stop_conditions": [
+        "insufficient_scope"
+      ]
+    },
+    {
+      "role_id": "repo-coder",
+      "allowed_actions": [
+        "repo_write",
+        "verification_write",
+        "verification_read",
+        "project_log_write"
+      ],
+      "required_inputs": [
+        "repo_scope",
+        "implementation_plan"
+      ],
+      "required_outputs": [
+        "change_summary",
+        "verification_result"
+      ],
+      "stop_conditions": [
+        "scope_conflict",
+        "missing_repo_scope"
+      ]
+    },
+    {
+      "role_id": "reviewer",
+      "allowed_actions": [
+        "review_decision",
+        "verification_read",
+        "project_log_write"
+      ],
+      "required_inputs": [
+        "review_package",
+        "changed_files"
+      ],
+      "required_outputs": [
+        "review_findings",
+        "review_decision"
+      ],
+      "stop_conditions": [
+        "missing_review_package"
+      ]
+    }
+  ]
+}

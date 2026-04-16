@@ -1,0 +1,74 @@
+{
+  "schema": "cutepower.gate-matrix/v1",
+  "states": [
+    "analysis",
+    "implementation",
+    "review",
+    "writeback"
+  ],
+  "actions": [
+    "repo_write",
+    "verification_write",
+    "verification_read",
+    "review_decision",
+    "project_log_write",
+    "project_current_update",
+    "knowledge_promotion"
+  ],
+  "rules": [
+    {
+      "state": "analysis",
+      "allow": [
+        "project_log_write",
+        "verification_read"
+      ],
+      "deny": [
+        "repo_write",
+        "verification_write",
+        "review_decision",
+        "project_current_update",
+        "knowledge_promotion"
+      ]
+    },
+    {
+      "state": "implementation",
+      "allow": [
+        "repo_write",
+        "verification_write",
+        "verification_read",
+        "project_log_write"
+      ],
+      "deny": [
+        "review_decision",
+        "project_current_update",
+        "knowledge_promotion"
+      ]
+    },
+    {
+      "state": "review",
+      "allow": [
+        "review_decision",
+        "verification_read",
+        "project_log_write"
+      ],
+      "deny": [
+        "repo_write",
+        "verification_write",
+        "project_current_update",
+        "knowledge_promotion"
+      ]
+    },
+    {
+      "state": "writeback",
+      "allow": [
+        "project_log_write",
+        "project_current_update"
+      ],
+      "deny": [
+        "repo_write",
+        "review_decision",
+        "knowledge_promotion"
+      ]
+    }
+  ]
+}

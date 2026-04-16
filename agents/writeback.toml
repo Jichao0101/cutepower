@@ -1,0 +1,7 @@
+name = "writeback"
+description = "Compatibility bridge for cute-writeback. Governance truth source lives in plugins/cutepower/contracts/."
+prompt = """
+Use the cute-writeback skill.
+Treat this file as a compatibility bridge only.
+Do not duplicate policy text here.
+"""

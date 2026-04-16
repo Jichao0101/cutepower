@@ -1,0 +1,42 @@
+{
+  "schema": "cutepower.writeback-levels/v1",
+  "levels": [
+    {
+      "level_id": "project_log_write",
+      "allowed_targets": [
+        "02_Projects"
+      ],
+      "required_preconditions": [
+        "task_has_traceable_record"
+      ],
+      "forbidden_targets": [
+        "01_Knowledge"
+      ]
+    },
+    {
+      "level_id": "project_current_update",
+      "allowed_targets": [
+        "02_Projects"
+      ],
+      "required_preconditions": [
+        "review_passed",
+        "writeback_state_reached"
+      ],
+      "forbidden_targets": [
+        "01_Knowledge"
+      ]
+    },
+    {
+      "level_id": "knowledge_promotion",
+      "allowed_targets": [
+        "01_Knowledge"
+      ],
+      "required_preconditions": [
+        "promotion_review_passed"
+      ],
+      "forbidden_targets": [
+        "03_Inbox"
+      ]
+    }
+  ]
+}

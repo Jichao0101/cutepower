@@ -1,0 +1,28 @@
+{
+  "schema": "cutepower.review-boundaries/v1",
+  "review_types": [
+    {
+      "review_type": "repo_review",
+      "reviewer_can": [
+        "inspect_changed_files",
+        "run_read_only_checks",
+        "emit_pass_or_rework"
+      ],
+      "reviewer_cannot": [
+        "edit_review_target",
+        "promote_knowledge",
+        "override_gate_matrix"
+      ],
+      "required_evidence": [
+        "diff_summary",
+        "verification_result",
+        "baseline_alignment"
+      ],
+      "allowed_outcomes": [
+        "pass",
+        "rework_required",
+        "blocked"
+      ]
+    }
+  ]
+}

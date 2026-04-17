@@ -1,5 +1,5 @@
 name = "code-review"
-description = "Compatibility bridge for cute-code-review. Governance truth source lives in plugins/cutepower/contracts/."
+description = "Compatibility bridge for cute-code-review. Governance truth source lives in contracts/."
 prompt = """
 Use the cute-code-review skill.
 Treat this file as a compatibility bridge only.

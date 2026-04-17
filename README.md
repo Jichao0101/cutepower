@@ -7,8 +7,8 @@ This README is the installed-plugin overview.
 Installation entry:
 
 - Before installation, use [README.codex.md](README.codex.md) and [.codex/INSTALL.md](.codex/INSTALL.md).
-- In the current monorepo development layout, cutepower lives at `plugins/cutepower/`.
-- If cutepower is split into its own repository, these documents should move to the repository root unchanged.
+- cutepower is now expected to live at the repository root as an independent project.
+- Do not treat a host knowledge repository as the code root for this project.
 
 Current scope:
 
@@ -54,13 +54,13 @@ Runtime hardening coverage:
 
 Testing note:
 
-- for clean plugin acceptance tests, prefer an isolated vault that contains only `.agents/plugins/marketplace.json` and a linked `plugins/cutepower`
-- do not rely on the monorepo development workspace as the primary plugin test environment
+- for clean plugin acceptance tests, prefer an isolated vault that contains only `.agents/plugins/marketplace.json` and a link to this repository root
+- do not rely on another host workspace as the primary plugin test environment
 - keep plugin validation focused on `contracts/`, `skills/`, `scripts/`, and thin bridge files
 
 Validation entries:
 
 ```bash
-node plugins/cutepower/scripts/validate-contracts.js
-node plugins/cutepower/scripts/test-runtime-gates.js
+node scripts/validate-contracts.js
+node scripts/test-runtime-gates.js
 ```

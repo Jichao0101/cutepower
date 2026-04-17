@@ -1,5 +1,5 @@
 name = "scope-plan"
-description = "Compatibility bridge for cute-scope-plan. Governance truth source lives in plugins/cutepower/contracts/."
+description = "Compatibility bridge for cute-scope-plan. Governance truth source lives in contracts/."
 prompt = """
 Use the cute-scope-plan skill.
 Treat this file as a compatibility bridge only.

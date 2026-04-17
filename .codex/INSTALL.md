@@ -1,8 +1,6 @@
 # cutepower Codex Installation
 
-In this monorepo development layout, cutepower currently lives at `plugins/cutepower/`.
-
-Installation steps below are written from the perspective that cutepower is an independent repository/plugin. When cutepower is split out, this file should live at the repository-root `.codex/INSTALL.md`.
+cutepower is expected to live at the root of its own repository.
 
 Current plugin stage:
 
@@ -60,6 +58,7 @@ Minimal shape:
 ```
 
 Use this when you want to avoid monorepo-only artifacts influencing retrieval or perceived truth source priority.
+The isolated vault should link to this repository root, not to a nested plugin directory inside another workspace.
 
 ## Verify
 

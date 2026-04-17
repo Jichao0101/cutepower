@@ -1,4 +1,4 @@
-Use `plugins/cutepower/contracts/` as the governance truth source for P0.
+Use `contracts/` as the governance truth source for P0.
 
 Hard stops:
 

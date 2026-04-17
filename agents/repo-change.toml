@@ -1,5 +1,5 @@
 name = "repo-change"
-description = "Compatibility bridge for cute-repo-change. Governance truth source lives in plugins/cutepower/contracts/."
+description = "Compatibility bridge for cute-repo-change. Governance truth source lives in contracts/."
 prompt = """
 Use the cute-repo-change skill.
 Treat this file as a compatibility bridge only.

@@ -10,24 +10,68 @@
     "repo_write",
     "verification_write",
     "verification_read",
+    "board_execute",
+    "artifact_collect",
     "review_decision",
     "project_log_write",
-    "project_current_update",
-    "knowledge_promotion"
+    "project_current_update"
   ],
+  "board_policy": {
+    "board_actions": [
+      "board_execute",
+      "artifact_collect"
+    ],
+    "action_relationships": [
+      {
+        "action": "board_execute",
+        "action_axis": "board_side",
+        "paired_with": [
+          "verification_read",
+          "verification_write"
+        ]
+      },
+      {
+        "action": "artifact_collect",
+        "action_axis": "board_side",
+        "paired_with": [
+          "verification_read"
+        ]
+      }
+    ],
+    "review_stage_constraints": {
+      "allowed_board_actions": [
+        "artifact_collect"
+      ],
+      "forbidden_board_actions": [
+        "board_execute"
+      ],
+      "allowed_roles": [
+        "repo-reviewer",
+        "functional-reviewer"
+      ],
+      "purpose": "evidence_collection_only",
+      "forbidden_responsibilities": [
+        "implementation",
+        "deployment",
+        "tuning",
+        "rerun_ownership"
+      ]
+    }
+  },
   "rules": [
     {
       "state": "analysis",
       "allow": [
         "project_log_write",
-        "verification_read"
+        "verification_read",
+        "board_execute",
+        "artifact_collect"
       ],
       "deny": [
         "repo_write",
         "verification_write",
         "review_decision",
-        "project_current_update",
-        "knowledge_promotion"
+        "project_current_update"
       ]
     },
     {
@@ -36,12 +80,13 @@
         "repo_write",
         "verification_write",
         "verification_read",
+        "board_execute",
+        "artifact_collect",
         "project_log_write"
       ],
       "deny": [
         "review_decision",
-        "project_current_update",
-        "knowledge_promotion"
+        "project_current_update"
       ]
     },
     {
@@ -49,13 +94,14 @@
       "allow": [
         "review_decision",
         "verification_read",
+        "artifact_collect",
         "project_log_write"
       ],
       "deny": [
         "repo_write",
         "verification_write",
-        "project_current_update",
-        "knowledge_promotion"
+        "board_execute",
+        "project_current_update"
       ]
     },
     {
@@ -66,8 +112,10 @@
       ],
       "deny": [
         "repo_write",
+        "verification_write",
         "review_decision",
-        "knowledge_promotion"
+        "board_execute",
+        "artifact_collect"
       ]
     }
   ]

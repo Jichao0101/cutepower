@@ -2,5 +2,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "cutepower gate matrix",
   "type": "object",
-  "required": ["schema", "states", "actions", "rules"]
+  "required": ["schema", "states", "actions", "board_policy", "rules"]
 }

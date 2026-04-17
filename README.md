@@ -1,6 +1,6 @@
-# cutepower
+# 1 cutepower
 
-cutepower is a plugin-first, contracts-first governance plugin for the Agent Workflow P0 loop.
+cutepower is a plugin-first, contracts-first governance plugin for the Agent Workflow P1 loop.
 
 This README is the installed-plugin overview.
 
@@ -10,19 +10,29 @@ Installation entry:
 - In the current monorepo development layout, cutepower lives at `plugins/cutepower/`.
 - If cutepower is split into its own repository, these documents should move to the repository root unchanged.
 
-P0 scope:
+Current scope:
 
 - active runtime assets live in the plugin
 - core governance contracts live in `contracts/`
 - skills consume contracts instead of copying rule text
 - `AGENTS.md` and `agents/*.toml` stay as thin bridge layers
-- legacy knowledge docs are not active truth sources
+- external design docs and project baselines are not active truth sources
+- P0 skills remain active:
+  - `using-cutepower`
+  - `cute-scope-plan`
+  - `cute-repo-change`
+  - `cute-code-review`
+  - `cute-writeback`
+- P1 skills now include:
+  - `cute-board-run`
+  - `cute-functional-review`
+  - `cute-incident-investigation`
 
-P0 does not include:
+Current non-goals:
 
-- P1/P2 skills
+- P2 skills
 - complex hooks
-- runtime enforcement
+- automatic runtime hook enforcement
 - automatic remediation
 
 Installed-plugin boundaries:
@@ -31,10 +41,26 @@ Installed-plugin boundaries:
 - `skills/` consumes contracts instead of duplicating rule text
 - `AGENTS.md` is a thin runtime bridge with hard stops
 - `agents/*.toml` is a compatibility bridge, not a policy source
-- `scripts/validate-contracts.js` provides the P0 validation entry
+- `scripts/validate-contracts.js` provides static contract validation
+- `scripts/runtime-gates.js` provides a minimal runtime gate evaluator for route, role, review, and writeback requests
+- `scripts/test-runtime-gates.js` provides positive and negative gate checks
 
-Validation entry:
+Runtime hardening coverage:
+
+- route/writeback requests are checked against `route_writeback_matrix`
+- review-stage `board_execute` is rejected and board artifact collection is separately gated
+- runtime requests reject legacy `reviewer` aliases
+- repo-reviewer, functional-reviewer, and incident-investigator stay separated by route and action gates
+
+Testing note:
+
+- for clean plugin acceptance tests, prefer an isolated vault that contains only `.agents/plugins/marketplace.json` and a linked `plugins/cutepower`
+- do not rely on the monorepo development workspace as the primary plugin test environment
+- keep plugin validation focused on `contracts/`, `skills/`, `scripts/`, and thin bridge files
+
+Validation entries:
 
 ```bash
 node plugins/cutepower/scripts/validate-contracts.js
+node plugins/cutepower/scripts/test-runtime-gates.js
 ```

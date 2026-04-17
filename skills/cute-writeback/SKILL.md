@@ -1,6 +1,6 @@
 ---
 name: cute-writeback
-description: Close the P0 loop for cutepower by applying the writeback level contract to project-side updates without promoting knowledge by default.
+description: Close the cutepower loop by applying writeback levels to execution records and project-state updates without turning the skill into a policy source.
 ---
 
 # Contracts

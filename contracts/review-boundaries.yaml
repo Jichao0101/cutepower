@@ -3,25 +3,124 @@
   "review_types": [
     {
       "review_type": "repo_review",
+      "reviewer_role_id": "repo-reviewer",
+      "skill_id": "cute-code-review",
       "reviewer_can": [
         "inspect_changed_files",
         "run_read_only_checks",
+        "collect_missing_artifacts",
         "emit_pass_or_rework"
       ],
       "reviewer_cannot": [
         "edit_review_target",
-        "promote_knowledge",
+        "inherit_full_author_context",
+        "inherit_full_author_reasoning",
+        "perform_writeback_adjudication",
         "override_gate_matrix"
       ],
       "required_evidence": [
+        "task_goal",
+        "implementation_plan",
         "diff_summary",
-        "verification_result",
-        "baseline_alignment"
+        "verification_results",
+        "verification_tier",
+        "necessary_code_context"
       ],
+      "minimum_evidence_package": [
+        "task_goal",
+        "implementation_plan",
+        "diff_summary",
+        "verification_results",
+        "verification_tier",
+        "necessary_code_context"
+      ],
+      "conditional_evidence_requirements": [
+        {
+          "when": "board_execution_involved",
+          "required": [
+            "board_run_report",
+            "artifact_manifest",
+            "board_failure_reason"
+          ]
+        }
+      ],
+      "independence_requirements": {
+        "separate_reviewer_stage_or_instance": true,
+        "use_minimum_evidence_package": true,
+        "allow_full_author_context": false,
+        "allow_full_author_reasoning": false
+      },
+      "missing_evidence_behavior": {
+        "allow_outcomes": [
+          "blocked",
+          "evidence_gap"
+        ],
+        "rework_requires_sufficient_evidence": true
+      },
       "allowed_outcomes": [
         "pass",
         "rework_required",
-        "blocked"
+        "blocked",
+        "evidence_gap"
+      ]
+    },
+    {
+      "review_type": "functional_review",
+      "reviewer_role_id": "functional-reviewer",
+      "skill_id": "cute-functional-review",
+      "reviewer_can": [
+        "inspect_requirements_package",
+        "inspect_behavioral_evidence",
+        "collect_missing_artifacts",
+        "emit_acceptance_decision"
+      ],
+      "reviewer_cannot": [
+        "edit_review_target",
+        "inherit_full_author_context",
+        "inherit_full_author_reasoning",
+        "perform_writeback_adjudication",
+        "override_gate_matrix"
+      ],
+      "required_evidence": [
+        "requirements_package",
+        "acceptance_items",
+        "interface_contracts",
+        "evidence_package"
+      ],
+      "minimum_evidence_package": [
+        "requirements_package",
+        "acceptance_items",
+        "interface_contracts",
+        "evidence_package"
+      ],
+      "conditional_evidence_requirements": [
+        {
+          "when": "board_execution_involved",
+          "required": [
+            "board_run_report",
+            "artifact_manifest",
+            "signal_observations"
+          ]
+        }
+      ],
+      "independence_requirements": {
+        "separate_reviewer_stage_or_instance": true,
+        "use_minimum_evidence_package": true,
+        "allow_full_author_context": false,
+        "allow_full_author_reasoning": false
+      },
+      "missing_evidence_behavior": {
+        "allow_outcomes": [
+          "blocked",
+          "evidence_gap"
+        ],
+        "rework_requires_sufficient_evidence": true
+      },
+      "allowed_outcomes": [
+        "pass",
+        "rework_required",
+        "blocked",
+        "evidence_gap"
       ]
     }
   ]

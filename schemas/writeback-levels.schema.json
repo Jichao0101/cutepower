@@ -2,5 +2,5 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "cutepower writeback levels",
   "type": "object",
-  "required": ["schema", "levels"]
+  "required": ["schema", "pass_statuses", "levels", "route_writeback_matrix"]
 }

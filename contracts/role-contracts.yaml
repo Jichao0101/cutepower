@@ -1,5 +1,12 @@
 {
   "schema": "cutepower.role-contracts/v1",
+  "role_aliases": [
+    {
+      "legacy_role_id": "reviewer",
+      "canonical_role_id": "repo-reviewer",
+      "status": "legacy_alias_only"
+    }
+  ],
   "roles": [
     {
       "role_id": "workflow-orchestrator",
@@ -25,7 +32,7 @@
       ]
     },
     {
-      "role_id": "knowledge-planner",
+      "role_id": "scope-planner",
       "allowed_actions": [
         "verification_read",
         "project_log_write"
@@ -65,22 +72,120 @@
       ]
     },
     {
-      "role_id": "reviewer",
+      "role_id": "repo-reviewer",
       "allowed_actions": [
         "review_decision",
         "verification_read",
+        "artifact_collect",
         "project_log_write"
       ],
       "required_inputs": [
-        "review_package",
-        "changed_files"
+        "task_goal",
+        "implementation_plan",
+        "diff_summary",
+        "verification_results",
+        "verification_tier",
+        "necessary_code_context"
       ],
       "required_outputs": [
         "review_findings",
-        "review_decision"
+        "review_decision",
+        "regression_risk_assessment",
+        "scope_compliance_assessment"
       ],
       "stop_conditions": [
-        "missing_review_package"
+        "missing_review_package",
+        "missing_independent_review_stage",
+        "missing_required_evidence"
+      ]
+    },
+    {
+      "role_id": "functional-reviewer",
+      "allowed_actions": [
+        "review_decision",
+        "verification_read",
+        "artifact_collect",
+        "project_log_write"
+      ],
+      "required_inputs": [
+        "requirements_package",
+        "acceptance_items",
+        "interface_contracts",
+        "evidence_package"
+      ],
+      "required_outputs": [
+        "compliance_matrix",
+        "evidence_used",
+        "evidence_gaps",
+        "review_conclusion",
+        "suggested_followup"
+      ],
+      "stop_conditions": [
+        "missing_requirements_package",
+        "missing_acceptance_items",
+        "evidence_insufficient_for_decision",
+        "missing_independent_review_stage"
+      ]
+    },
+    {
+      "role_id": "board-operator",
+      "allowed_actions": [
+        "board_execute",
+        "artifact_collect",
+        "verification_read",
+        "verification_write",
+        "project_log_write"
+      ],
+      "required_inputs": [
+        "board_target",
+        "deploy_artifacts",
+        "run_commands",
+        "collect_paths",
+        "expected_signals"
+      ],
+      "required_outputs": [
+        "board_run_report",
+        "artifact_manifest",
+        "signal_observations",
+        "execution_status",
+        "board_failure_reason",
+        "environment_fingerprint"
+      ],
+      "stop_conditions": [
+        "missing_board_target",
+        "missing_run_commands",
+        "invalid_collect_paths"
+      ]
+    },
+    {
+      "role_id": "incident-investigator",
+      "allowed_actions": [
+        "verification_read",
+        "board_execute",
+        "artifact_collect",
+        "project_log_write"
+      ],
+      "required_inputs": [
+        "observed_symptoms",
+        "artifact_inventory",
+        "log_sources",
+        "trigger_condition",
+        "board_target_or_no_board_execution",
+        "repo_scope",
+        "verification_tier"
+      ],
+      "required_outputs": [
+        "hypothesis_set",
+        "evidence_gaps",
+        "probe_plan",
+        "rerun_summary",
+        "route_decision",
+        "next_required_skill"
+      ],
+      "stop_conditions": [
+        "missing_initial_evidence",
+        "missing_route_decision",
+        "unresolved_probe_scope"
       ]
     }
   ]

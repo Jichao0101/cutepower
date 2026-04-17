@@ -4,6 +4,14 @@ In this monorepo development layout, cutepower currently lives at `plugins/cutep
 
 Installation steps below are written from the perspective that cutepower is an independent repository/plugin. When cutepower is split out, this file should live at the repository-root `.codex/INSTALL.md`.
 
+Current plugin stage:
+
+- installed plugin scope is P1
+- P0 skills remain active
+- P1 adds board run, functional review, and incident investigation skills
+- contracts and validation now include minimal runtime gate hardening
+- external project docs are not an active plugin truth source during installation or testing
+
 ## Prerequisites
 
 - Git is installed.
@@ -38,6 +46,21 @@ mklink /J <codex-plugins-dir>\cutepower <cutepower-repo>
 
 Fully restart Codex after linking the plugin so skill discovery reloads the plugin tree.
 
+## Isolated Test Vault
+
+For clean plugin acceptance tests, prefer an isolated vault instead of the monorepo workspace.
+
+Minimal shape:
+
+```text
+<isolated-vault>/
+├── .agents/plugins/marketplace.json
+└── plugins/
+    └── cutepower -> <cutepower-repo>
+```
+
+Use this when you want to avoid monorepo-only artifacts influencing retrieval or perceived truth source priority.
+
 ## Verify
 
 Start a new Codex session and ask for a task that should use cutepower.
@@ -46,6 +69,15 @@ Expected result:
 
 - Codex can discover the plugin.
 - Codex can read `contracts/`, `skills/`, and the bridge files.
+- Both static contract validation and runtime gate tests can run locally.
+- external project documentation is not required for plugin self-validation.
+
+Recommended verification commands:
+
+```text
+node scripts/validate-contracts.js
+node scripts/test-runtime-gates.js
+```
 
 ## Updating
 
@@ -55,6 +87,7 @@ Expected result:
 
 ```text
 node scripts/validate-contracts.js
+node scripts/test-runtime-gates.js
 ```
 
 ## Uninstalling

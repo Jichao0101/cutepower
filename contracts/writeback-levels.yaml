@@ -1,41 +1,179 @@
 {
   "schema": "cutepower.writeback-levels/v1",
+  "pass_statuses": [
+    {
+      "pass_id": "repo_review_passed",
+      "review_type": "repo_review",
+      "reviewer_role_id": "repo-reviewer"
+    },
+    {
+      "pass_id": "functional_review_passed",
+      "review_type": "functional_review",
+      "reviewer_role_id": "functional-reviewer"
+    }
+  ],
   "levels": [
     {
       "level_id": "project_log_write",
       "allowed_targets": [
-        "02_Projects"
+        "execution_record"
       ],
       "required_preconditions": [
-        "task_has_traceable_record"
+        "task_has_traceable_record",
+        "route_writeback_requirements_satisfied"
       ],
       "forbidden_targets": [
-        "01_Knowledge"
+        "external_truth_store"
       ]
     },
     {
       "level_id": "project_current_update",
       "allowed_targets": [
-        "02_Projects"
+        "project_state"
       ],
       "required_preconditions": [
-        "review_passed",
-        "writeback_state_reached"
+        "writeback_state_reached",
+        "route_writeback_requirements_satisfied"
       ],
       "forbidden_targets": [
-        "01_Knowledge"
+        "external_truth_store"
+      ]
+    }
+  ],
+  "route_writeback_matrix": [
+    {
+      "route_id": "implementation_default",
+      "scenario": "default",
+      "required_passes": [
+        "repo_review_passed"
+      ],
+      "required_gate": "review",
+      "allowed_writeback_level": "project_current_update",
+      "required_preconditions": []
+    },
+    {
+      "route_id": "implementation_board_validation",
+      "scenario": "default",
+      "required_passes": [
+        "repo_review_passed"
+      ],
+      "required_gate": "review",
+      "allowed_writeback_level": "project_current_update",
+      "required_preconditions": [
+        "board_evidence_recorded_when_required"
       ]
     },
     {
-      "level_id": "knowledge_promotion",
-      "allowed_targets": [
-        "01_Knowledge"
+      "route_id": "bug_fix_default",
+      "scenario": "default",
+      "required_passes": [
+        "repo_review_passed"
       ],
+      "required_gate": "review",
+      "allowed_writeback_level": "project_current_update",
+      "required_preconditions": []
+    },
+    {
+      "route_id": "bug_fix_board_validation",
+      "scenario": "default",
+      "required_passes": [
+        "repo_review_passed"
+      ],
+      "required_gate": "review",
+      "allowed_writeback_level": "project_current_update",
       "required_preconditions": [
-        "promotion_review_passed"
+        "board_evidence_recorded_when_required"
+      ]
+    },
+    {
+      "route_id": "audit_functional_read_only",
+      "scenario": "default",
+      "required_passes": [
+        "functional_review_passed"
       ],
-      "forbidden_targets": [
-        "03_Inbox"
+      "required_gate": "review",
+      "allowed_writeback_level": "project_current_update",
+      "required_preconditions": []
+    },
+    {
+      "route_id": "audit_functional_board",
+      "scenario": "default",
+      "required_passes": [
+        "functional_review_passed"
+      ],
+      "required_gate": "review",
+      "allowed_writeback_level": "project_current_update",
+      "required_preconditions": [
+        "board_evidence_recorded_when_required"
+      ]
+    },
+    {
+      "route_id": "incident_investigation_default",
+      "scenario": "insufficient_evidence",
+      "required_passes": [],
+      "required_gate": "analysis",
+      "allowed_writeback_level": "project_log_write",
+      "required_preconditions": [
+        "investigation_route_recorded_when_required"
+      ]
+    },
+    {
+      "route_id": "incident_investigation_default",
+      "scenario": "environment_issue",
+      "required_passes": [],
+      "required_gate": "analysis",
+      "allowed_writeback_level": "project_log_write",
+      "required_preconditions": [
+        "investigation_route_recorded_when_required"
+      ]
+    },
+    {
+      "route_id": "incident_investigation_default",
+      "scenario": "candidate_fix_unreviewed",
+      "required_passes": [],
+      "required_gate": "implementation",
+      "allowed_writeback_level": "project_log_write",
+      "required_preconditions": [
+        "investigation_route_recorded_when_required"
+      ],
+      "forbidden_writeback_levels": [
+        "project_current_update"
+      ]
+    },
+    {
+      "route_id": "incident_investigation_board",
+      "scenario": "insufficient_evidence",
+      "required_passes": [],
+      "required_gate": "analysis",
+      "allowed_writeback_level": "project_log_write",
+      "required_preconditions": [
+        "board_evidence_recorded_when_required",
+        "investigation_route_recorded_when_required"
+      ]
+    },
+    {
+      "route_id": "incident_investigation_board",
+      "scenario": "environment_issue",
+      "required_passes": [],
+      "required_gate": "analysis",
+      "allowed_writeback_level": "project_log_write",
+      "required_preconditions": [
+        "board_evidence_recorded_when_required",
+        "investigation_route_recorded_when_required"
+      ]
+    },
+    {
+      "route_id": "incident_investigation_board",
+      "scenario": "candidate_fix_unreviewed",
+      "required_passes": [],
+      "required_gate": "implementation",
+      "allowed_writeback_level": "project_log_write",
+      "required_preconditions": [
+        "board_evidence_recorded_when_required",
+        "investigation_route_recorded_when_required"
+      ],
+      "forbidden_writeback_levels": [
+        "project_current_update"
       ]
     }
   ]

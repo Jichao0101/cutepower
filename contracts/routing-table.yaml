@@ -16,9 +16,39 @@
         "cute-writeback"
       ],
       "required_roles": [
-        "knowledge-planner",
+        "scope-planner",
         "repo-coder",
-        "reviewer"
+        "repo-reviewer"
+      ],
+      "required_gates": [
+        "analysis",
+        "implementation",
+        "review",
+        "writeback"
+      ],
+      "writeback_level": "project_current_update"
+    },
+    {
+      "route_id": "implementation_board_validation",
+      "primary_type": "implementation",
+      "modifiers": [
+        "code_change_allowed",
+        "review_required",
+        "board_execution_required"
+      ],
+      "entry_skill": "using-cutepower",
+      "skill_chain": [
+        "cute-scope-plan",
+        "cute-repo-change",
+        "cute-board-run",
+        "cute-code-review",
+        "cute-writeback"
+      ],
+      "required_roles": [
+        "scope-planner",
+        "repo-coder",
+        "board-operator",
+        "repo-reviewer"
       ],
       "required_gates": [
         "analysis",
@@ -43,9 +73,9 @@
         "cute-writeback"
       ],
       "required_roles": [
-        "knowledge-planner",
+        "scope-planner",
         "repo-coder",
-        "reviewer"
+        "repo-reviewer"
       ],
       "required_gates": [
         "analysis",
@@ -56,20 +86,190 @@
       "writeback_level": "project_current_update"
     },
     {
-      "route_id": "knowledge_task_read_only",
-      "primary_type": "knowledge_task",
+      "route_id": "bug_fix_board_validation",
+      "primary_type": "bug_fix",
       "modifiers": [
+        "code_change_allowed",
+        "review_required",
+        "board_execution_required"
+      ],
+      "entry_skill": "using-cutepower",
+      "skill_chain": [
+        "cute-scope-plan",
+        "cute-repo-change",
+        "cute-board-run",
+        "cute-code-review",
+        "cute-writeback"
+      ],
+      "required_roles": [
+        "scope-planner",
+        "repo-coder",
+        "board-operator",
+        "repo-reviewer"
+      ],
+      "required_gates": [
+        "analysis",
+        "implementation",
+        "review",
+        "writeback"
+      ],
+      "writeback_level": "project_current_update"
+    },
+    {
+      "route_id": "audit_functional_read_only",
+      "primary_type": "audit",
+      "modifiers": [
+        "functional_scope",
         "read_only"
       ],
       "entry_skill": "using-cutepower",
       "skill_chain": [
-        "cute-scope-plan"
+        "cute-scope-plan",
+        "cute-functional-review",
+        "cute-writeback"
       ],
       "required_roles": [
-        "knowledge-planner"
+        "scope-planner",
+        "functional-reviewer"
       ],
       "required_gates": [
-        "analysis"
+        "analysis",
+        "review",
+        "writeback"
+      ],
+      "writeback_level": "project_current_update"
+    },
+    {
+      "route_id": "audit_functional_board",
+      "primary_type": "audit",
+      "modifiers": [
+        "functional_scope",
+        "read_only",
+        "board_execution_required"
+      ],
+      "entry_skill": "using-cutepower",
+      "skill_chain": [
+        "cute-scope-plan",
+        "cute-board-run",
+        "cute-functional-review",
+        "cute-writeback"
+      ],
+      "required_roles": [
+        "scope-planner",
+        "board-operator",
+        "functional-reviewer"
+      ],
+      "required_gates": [
+        "analysis",
+        "review",
+        "writeback"
+      ],
+      "writeback_level": "project_current_update"
+    },
+    {
+      "route_id": "incident_investigation_default",
+      "primary_type": "incident_investigation",
+      "modifiers": [
+        "review_required"
+      ],
+      "entry_skill": "using-cutepower",
+      "skill_chain": [
+        "cute-scope-plan",
+        "cute-incident-investigation",
+        "cute-writeback"
+      ],
+      "required_roles": [
+        "scope-planner",
+        "incident-investigator"
+      ],
+      "conditional_handoffs": [
+        {
+          "condition": "debug_repo_change_requested",
+          "skill_chain": [
+            "cute-repo-change",
+            "cute-code-review"
+          ],
+          "required_roles": [
+            "repo-coder",
+            "repo-reviewer"
+          ],
+          "required_gates": [
+            "implementation",
+            "review"
+          ]
+        },
+        {
+          "condition": "functional_adjudication_required",
+          "skill_chain": [
+            "cute-functional-review"
+          ],
+          "required_roles": [
+            "functional-reviewer"
+          ],
+          "required_gates": [
+            "review"
+          ]
+        }
+      ],
+      "required_gates": [
+        "analysis",
+        "writeback"
+      ],
+      "writeback_level": "project_log_write"
+    },
+    {
+      "route_id": "incident_investigation_board",
+      "primary_type": "incident_investigation",
+      "modifiers": [
+        "review_required",
+        "board_execution_required"
+      ],
+      "entry_skill": "using-cutepower",
+      "skill_chain": [
+        "cute-scope-plan",
+        "cute-incident-investigation",
+        "cute-board-run",
+        "cute-writeback"
+      ],
+      "required_roles": [
+        "scope-planner",
+        "incident-investigator",
+        "board-operator"
+      ],
+      "conditional_handoffs": [
+        {
+          "condition": "debug_repo_change_requested",
+          "skill_chain": [
+            "cute-repo-change",
+            "cute-board-run",
+            "cute-code-review"
+          ],
+          "required_roles": [
+            "repo-coder",
+            "board-operator",
+            "repo-reviewer"
+          ],
+          "required_gates": [
+            "implementation",
+            "review"
+          ]
+        },
+        {
+          "condition": "functional_adjudication_required",
+          "skill_chain": [
+            "cute-functional-review"
+          ],
+          "required_roles": [
+            "functional-reviewer"
+          ],
+          "required_gates": [
+            "review"
+          ]
+        }
+      ],
+      "required_gates": [
+        "analysis",
+        "writeback"
       ],
       "writeback_level": "project_log_write"
     }

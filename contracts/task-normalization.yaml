@@ -1,0 +1,219 @@
+{
+  "schema": "cutepower.task-normalization/v1",
+  "activation": {
+    "mode": "natural_language_autostart",
+    "entry_skill": "using-cutepower",
+    "profile_output": "task_profile"
+  },
+  "primary_type_rules": [
+    {
+      "primary_type": "incident_investigation",
+      "priority": 10,
+      "match_any": [
+        "incident",
+        "investigate",
+        "investigation",
+        "triage",
+        "debug",
+        "diagnose",
+        "排查",
+        "定位",
+        "调查",
+        "分析日志",
+        "log",
+        "crash dump"
+      ],
+      "add_modifiers": [
+        "review_required"
+      ]
+    },
+    {
+      "primary_type": "bug_fix",
+      "priority": 20,
+      "match_any": [
+        "bug",
+        "fix",
+        "defect",
+        "regression",
+        "repair",
+        "hotfix",
+        "修复",
+        "修一下",
+        "报错",
+        "错误",
+        "故障",
+        "回归",
+        "崩溃"
+      ],
+      "add_modifiers": [
+        "code_change_allowed",
+        "review_required"
+      ]
+    },
+    {
+      "primary_type": "implementation",
+      "priority": 30,
+      "match_any": [
+        "implement",
+        "add",
+        "build",
+        "create",
+        "update",
+        "change",
+        "modify",
+        "refactor",
+        "支持",
+        "新增",
+        "实现",
+        "修改",
+        "重构",
+        "接入"
+      ],
+      "add_modifiers": [
+        "code_change_allowed",
+        "review_required"
+      ]
+    },
+    {
+      "primary_type": "audit",
+      "priority": 40,
+      "match_any": [
+        "review",
+        "audit",
+        "inspect",
+        "check",
+        "assess",
+        "审查",
+        "评审",
+        "检查",
+        "看一下",
+        "read only",
+        "只读"
+      ],
+      "add_modifiers": [
+        "functional_scope",
+        "read_only"
+      ]
+    }
+  ],
+  "modifier_rules": [
+    {
+      "modifier": "board_execution_required",
+      "priority": 10,
+      "match_any": [
+        "board",
+        "device",
+        "hardware",
+        "target",
+        "deploy",
+        "flash",
+        "on-board",
+        "板端",
+        "上板",
+        "真机",
+        "设备端",
+        "烧录"
+      ]
+    },
+    {
+      "modifier": "read_only",
+      "priority": 20,
+      "match_any": [
+        "review",
+        "audit",
+        "inspect",
+        "read only",
+        "只读",
+        "不要修改",
+        "先看"
+      ]
+    },
+    {
+      "modifier": "functional_scope",
+      "priority": 30,
+      "match_any": [
+        "review",
+        "audit",
+        "acceptance",
+        "功能",
+        "行为",
+        "验收",
+        "评估"
+      ]
+    },
+    {
+      "modifier": "code_change_allowed",
+      "priority": 40,
+      "match_any": [
+        "fix",
+        "implement",
+        "add",
+        "update",
+        "change",
+        "modify",
+        "修复",
+        "实现",
+        "新增",
+        "修改",
+        "改一下"
+      ]
+    },
+    {
+      "modifier": "review_required",
+      "priority": 50,
+      "match_any": [
+        "fix",
+        "implement",
+        "change",
+        "review",
+        "audit",
+        "修复",
+        "实现",
+        "修改",
+        "评审"
+      ]
+    }
+  ],
+  "guardrails": {
+    "strip_write_modifiers_when_read_only": true,
+    "never_infer_board_target": true,
+    "ambiguous_primary_type_result": "needs_clarification",
+    "no_keyword_hard_skill_jump": true,
+    "require_route_resolution_before_execution": true
+  },
+  "context_rules": [
+    {
+      "field_id": "repo_root",
+      "required_for_primary_types": [
+        "implementation",
+        "bug_fix",
+        "incident_investigation"
+      ],
+      "infer_from": "cwd",
+      "missing_behavior": "infer"
+    },
+    {
+      "field_id": "knowledge_base_root",
+      "required_when_keywords": [
+        "knowledge",
+        "wiki",
+        "readme",
+        "document",
+        "docs",
+        "知识库",
+        "文档",
+        "说明书"
+      ],
+      "infer_from": "none",
+      "missing_behavior": "prompt_gap"
+    },
+    {
+      "field_id": "board_target",
+      "required_when_modifiers": [
+        "board_execution_required"
+      ],
+      "infer_from": "none",
+      "missing_behavior": "prompt_gap"
+    }
+  ]
+}

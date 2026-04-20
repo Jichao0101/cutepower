@@ -9,18 +9,25 @@ Route the task into the P0 skill chain without copying governance text.
 
 # 2 Contracts
 
+- `task-normalization`
 - `routing-table`
 - `gate-matrix`
 - `contract-index`
 
 # 3 Workflow
 
-1. Parse `primary_type` and `task_modifiers`.
+1. Normalize the natural-language task into a `task_profile`, including inferred `primary_type`, `task_modifiers`, and execution-context gaps.
 2. Resolve the matching `route_id`.
 3. Emit the next skill handoff.
 4. Emit the gate summary.
 
-# 4 Do Not Do
+# 4 Entry Notes
+
+- Prefer the `task-normalization` contract instead of requiring the user to hand-author a full structured prompt.
+- Do not hard-jump to a concrete downstream skill from keywords alone.
+- If route resolution or required execution context is still missing, stop at the handoff package and surface the gap.
+
+# 5 Do Not Do
 
 - Do not restate role contracts.
 - Do not restate review boundaries.

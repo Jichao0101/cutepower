@@ -77,6 +77,45 @@ function main() {
   ensureUnique("review type ids", [...reviewTypes]);
   ensureUnique("writeback pass ids", [...passStatuses]);
 
+  ensureArray("task-normalization.primary_type_rules", docs["task-normalization"].primary_type_rules);
+  ensureArray("task-normalization.modifier_rules", docs["task-normalization"].modifier_rules);
+  ensureArray("task-normalization.context_rules", docs["task-normalization"].context_rules);
+  ensureKeys("task-normalization.activation", docs["task-normalization"].activation, ["mode", "entry_skill", "profile_output"]);
+  ensureSkillExists(docs["task-normalization"].activation.entry_skill);
+  ensureKeys("task-normalization.guardrails", docs["task-normalization"].guardrails, [
+    "strip_write_modifiers_when_read_only",
+    "never_infer_board_target",
+    "ambiguous_primary_type_result",
+    "no_keyword_hard_skill_jump",
+    "require_route_resolution_before_execution"
+  ]);
+  for (const rule of docs["task-normalization"].primary_type_rules) {
+    ensureKeys(`task-normalization.primary_type_rule.${rule.primary_type}`, rule, [
+      "primary_type",
+      "priority",
+      "match_any",
+      "add_modifiers"
+    ]);
+    ensureArray(`task-normalization.primary_type_rule.${rule.primary_type}.match_any`, rule.match_any);
+    ensureArray(`task-normalization.primary_type_rule.${rule.primary_type}.add_modifiers`, rule.add_modifiers);
+  }
+  for (const rule of docs["task-normalization"].modifier_rules) {
+    ensureKeys(`task-normalization.modifier_rule.${rule.modifier}`, rule, ["modifier", "priority", "match_any"]);
+    ensureArray(`task-normalization.modifier_rule.${rule.modifier}.match_any`, rule.match_any);
+  }
+  for (const rule of docs["task-normalization"].context_rules) {
+    ensureKeys(`task-normalization.context_rule.${rule.field_id}`, rule, ["field_id", "infer_from", "missing_behavior"]);
+    if (rule.required_for_primary_types) {
+      ensureArray(`task-normalization.context_rule.${rule.field_id}.required_for_primary_types`, rule.required_for_primary_types);
+    }
+    if (rule.required_when_modifiers) {
+      ensureArray(`task-normalization.context_rule.${rule.field_id}.required_when_modifiers`, rule.required_when_modifiers);
+    }
+    if (rule.required_when_keywords) {
+      ensureArray(`task-normalization.context_rule.${rule.field_id}.required_when_keywords`, rule.required_when_keywords);
+    }
+  }
+
   ensureArray("role-contracts.role_aliases", docs["role-contracts"].role_aliases);
   for (const alias of docs["role-contracts"].role_aliases) {
     ensureKeys("role alias", alias, ["legacy_role_id", "canonical_role_id", "status"]);

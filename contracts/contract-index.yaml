@@ -3,6 +3,14 @@
   "plugin": "cutepower",
   "contracts": [
     {
+      "id": "task-normalization",
+      "path": "contracts/task-normalization.yaml",
+      "schema_path": "schemas/task-normalization.schema.json",
+      "version": "0.1.0",
+      "status": "active",
+      "precedence": 5
+    },
+    {
       "id": "gate-matrix",
       "path": "contracts/gate-matrix.yaml",
       "schema_path": "schemas/gate-matrix.schema.json",

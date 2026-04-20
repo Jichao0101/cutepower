@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cutepower task normalization",
+  "type": "object",
+  "required": [
+    "schema",
+    "activation",
+    "primary_type_rules",
+    "modifier_rules",
+    "guardrails",
+    "context_rules"
+  ]
+}

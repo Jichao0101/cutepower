@@ -34,6 +34,10 @@ function main() {
     readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").source.path === "./.codex/plugins/cutepower",
     "personal marketplace path is incorrect"
   );
+  assert(
+    readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").policy.installation === "INSTALLED",
+    "personal marketplace installation policy is incorrect"
+  );
 
   run(["--mode", "repo", "--target-root", fakeRepoRoot]);
   const repoPlugin = path.join(fakeRepoRoot, "plugins", "cutepower", ".codex-plugin", "plugin.json");
@@ -45,6 +49,10 @@ function main() {
   assert(
     readJson(repoMarketplace).plugins.find((plugin) => plugin.name === "cutepower").source.path === "./plugins/cutepower",
     "repo marketplace path is incorrect"
+  );
+  assert(
+    readJson(repoMarketplace).plugins.find((plugin) => plugin.name === "cutepower").policy.installation === "INSTALLED",
+    "repo marketplace installation policy is incorrect"
   );
 
   console.log("cutepower install tests passed");

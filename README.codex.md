@@ -11,11 +11,9 @@ Fetch and follow instructions from .codex/INSTALL.md
 Important distinction:
 
 - `node scripts/install-plugin.js ...`
-  - bootstraps the local plugin source and writes the marketplace entry so Codex can find `cutepower` in `/plugins`
-- the real runtime install
-  - is the `/plugins` action where you search for `cutepower` and select `Install Plugin`
+  - installs the local runtime plugin copy and writes the marketplace entry so Codex shows `cutepower` as `installed` in `/plugins`
 
-After the first successful bootstrap plus `/plugins` install, cutepower should remain available for later sessions. Re-run the bootstrap only when you want to update or replace that installed plugin source.
+After the first successful script install, cutepower should remain installed for later sessions. Re-run the script only when you want to update or replace that installed plugin source.
 
 Current repository note:
 

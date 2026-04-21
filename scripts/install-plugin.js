@@ -187,7 +187,7 @@ function writeMarketplace(layout) {
       path: layout.sourcePath
     },
     policy: {
-      installation: "AVAILABLE",
+      installation: "INSTALLED",
       authentication: "ON_INSTALL"
     },
     category: "Productivity"

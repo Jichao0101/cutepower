@@ -3,12 +3,11 @@
 cutepower has two distinct states:
 
 - development source: the git repository you edit
-- bootstrap source: the local plugin copy and marketplace entry that make `cutepower` discoverable in `/plugins`
-- runtime installation: the actual `/plugins` install action that enables the plugin for real use
+- runtime source: the local plugin copy and marketplace entry that make `cutepower` installed in `/plugins`
 
 Do not use the development repository root as the default runtime truth source.
 
-For normal use, bootstrap is a one-time setup per target location. After bootstrap, open `/plugins`, search for `cutepower`, and select `Install Plugin`. You do not need to repeat that whole process for every Codex session unless you are refreshing the installed plugin source after changes.
+For normal use, installation is a one-time setup per target location. After running the install script, `cutepower` should show as `installed` in `/plugins`. You do not need a second `/plugins` install step, and you do not need to repeat the script for every Codex session unless you are refreshing the installed plugin source after changes.
 
 Current plugin stage:
 
@@ -36,12 +35,7 @@ This bootstraps:
 ```
 
 The marketplace entry points to `./.codex/plugins/cutepower`, so discovery stays under the user home instead of the development repository path.
-
-Then in Codex:
-
-1. Open `/plugins`
-2. Search for `cutepower`
-3. Select `Install Plugin`
+After this, open `/plugins` and confirm `cutepower` is already marked `installed`.
 
 ## Repo-scoped install
 
@@ -59,12 +53,7 @@ This bootstraps:
 ```
 
 The repo marketplace entry points to `./plugins/cutepower`, so discovery stays relative to the repo root.
-
-Then in the repo-scoped Codex session:
-
-1. Open `/plugins`
-2. Search for `cutepower`
-3. Select `Install Plugin`
+After this, open `/plugins` in the repo-scoped Codex session and confirm `cutepower` is already marked `installed`.
 
 ## Force replace an existing install
 
@@ -79,7 +68,7 @@ node scripts/install-plugin.js --mode repo --target-root <repo-root> --force
 
 1. Confirm the runtime source is the installed copy, not the development repository.
 2. Confirm the marketplace path is relative to the install root.
-3. Open `/plugins`, confirm `cutepower` is discoverable, and install it there.
+3. Open `/plugins` and confirm `cutepower` is discoverable and marked `installed`.
 4. Run validation from the bootstrapped plugin copy.
 
 Recommended commands:

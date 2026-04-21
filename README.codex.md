@@ -8,6 +8,15 @@ If cutepower is not installed yet, tell Codex:
 Fetch and follow instructions from .codex/INSTALL.md
 ```
 
+Important distinction:
+
+- `node scripts/install-plugin.js ...`
+  - bootstraps the local plugin source and writes the marketplace entry so Codex can find `cutepower` in `/plugins`
+- the real runtime install
+  - is the `/plugins` action where you search for `cutepower` and select `Install Plugin`
+
+After the first successful bootstrap plus `/plugins` install, cutepower should remain available for later sessions. Re-run the bootstrap only when you want to update or replace that installed plugin source.
+
 Current repository note:
 
 - the current repository is the development source, not the default runtime install source

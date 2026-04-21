@@ -2,7 +2,24 @@
 
 cutepower is a plugin-first, contracts-first governance plugin for the Agent Workflow P1 loop.
 
-This README is the installed-plugin overview.
+This README is the runtime-plugin overview after the plugin has been installed from `/plugins`.
+
+## Codex Quick Start
+
+If cutepower is not installed yet, tell Codex:
+
+```text
+Fetch and follow instructions from .codex/INSTALL.md
+```
+
+Important distinction:
+
+- `node scripts/install-plugin.js ...`
+  - bootstraps the local plugin source and writes the marketplace entry that makes `cutepower` show up in `/plugins`
+- the real runtime install
+  - happens after that, when you open `/plugins`, search for `cutepower`, and select `Install Plugin`
+
+After the first successful bootstrap plus `/plugins` install, cutepower should remain available for later Codex sessions. Re-run the bootstrap only when you intentionally update or replace the installed plugin source.
 
 Installation entry:
 

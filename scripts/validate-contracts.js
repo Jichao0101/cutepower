@@ -92,19 +92,30 @@ function main() {
     "entry_skill",
     "profile_output",
     "autostart_primary_types",
+    "prefer_intake_for_engineering_signals",
+    "engineering_signal_terms",
     "fallback_behavior",
     "runtime_entry",
     "runtime_discovery"
   ]);
   ensureSkillExists(docs["task-normalization"].activation.entry_skill);
   ensureArray("task-normalization.activation.autostart_primary_types", docs["task-normalization"].activation.autostart_primary_types);
+  ensureArray("task-normalization.activation.engineering_signal_terms", docs["task-normalization"].activation.engineering_signal_terms);
   ensureKeys("task-normalization.activation.runtime_entry", docs["task-normalization"].activation.runtime_entry, [
     "intake_script",
     "route_resolution_output",
     "blocking_gaps_output",
-    "runtime_gate_output"
+    "runtime_gate_output",
+    "protected_execution_skills"
   ]);
   ensurePluginPathExists(docs["task-normalization"].activation.runtime_entry.intake_script, "task-normalization runtime intake script");
+  ensureArray(
+    "task-normalization.activation.runtime_entry.protected_execution_skills",
+    docs["task-normalization"].activation.runtime_entry.protected_execution_skills
+  );
+  for (const skillName of docs["task-normalization"].activation.runtime_entry.protected_execution_skills) {
+    ensureSkillExists(skillName);
+  }
   ensureKeys("task-normalization.activation.runtime_discovery", docs["task-normalization"].activation.runtime_discovery, [
     "keywords",
     "allowed_roots"

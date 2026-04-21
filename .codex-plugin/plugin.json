@@ -26,6 +26,6 @@
       "Read",
       "Write"
     ],
-    "defaultPrompt": "Use cutepower intake first for engineering tasks, then hand off after route resolution, gap checks, and runtime gating."
+    "defaultPrompt": "Run engineering requests through cutepower intake first; only fall back when intake explicitly declines."
   }
 }

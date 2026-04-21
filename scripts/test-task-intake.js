@@ -37,6 +37,7 @@ function main() {
   assert(bugFix.intake.status === "accepted", "bug-fix request should be accepted by intake");
   assert(bugFix.route_resolution.route_id === "bug_fix_default", "bug-fix request should resolve the bug-fix route");
   assert(bugFix.skill_handoff.next_skill === "cute-scope-plan", "bug-fix request should hand off to cute-scope-plan first");
+  assert(!bugFix.execution_policy.direct_execution_allowed, "accepted bug-fix should not allow direct fallback execution");
 
   const incident = buildIntakePackage({
     task_goal: "Investigate the crash logs and triage the incident before deciding whether code changes are needed.",
@@ -50,6 +51,7 @@ function main() {
     incident.skill_handoff.next_skill === "cute-scope-plan",
     "incident request should hand off through scope plan before any repo change"
   );
+  assert(!incident.execution_policy.direct_execution_allowed, "incident intake should not allow direct fallback execution");
 
   const audit = buildIntakePackage({
     task_goal: "Audit the current behavior and review it in read only mode. Do not modify code.",
@@ -85,6 +87,22 @@ function main() {
     blockedBoard.blocking_gaps.some((gap) => gap.gap_id === "board_execute_authorization"),
     "board task should report board authorization gap"
   );
+  assert(!blockedBoard.execution_policy.direct_execution_allowed, "blocked board task should not silently fallback");
+
+  const lowConfidenceEngineering = buildIntakePackage({
+    task_goal: "Take a quick look at the failing repo flow and tell me what code path probably needs attention.",
+    cwd
+  });
+  assert(lowConfidenceEngineering.engineering_signal.requested, "low-confidence engineering task should still trigger engineering intake");
+  assert(
+    lowConfidenceEngineering.runtime_gate.status === "clarification_required",
+    "low-confidence engineering task should require clarification instead of declining"
+  );
+  assert(
+    !lowConfidenceEngineering.execution_policy.direct_execution_allowed,
+    "low-confidence engineering task should not silently fallback to direct execution"
+  );
+  assert(lowConfidenceEngineering.skill_handoff === null, "clarification-required intake must not hand off to execution skills");
 
   const runtimeDiscovery = buildIntakePackage({
     task_goal: "Check the Codex plugin runtime hook and marketplace entry under .codex and .agents before changing anything.",
@@ -118,6 +136,21 @@ function main() {
     repoAuthGap.blocking_gaps.some((gap) => gap.gap_id === "repo_write_authorization"),
     "repo task should report repo write authorization gap"
   );
+  assert(!repoAuthGap.execution_policy.direct_execution_allowed, "blocked repo task should not silently fallback");
+
+  const explicitDecline = buildIntakePackage({
+    task_goal: "Summarize this conversation style and help me write a short reply.",
+    cwd
+  });
+  assert(explicitDecline.runtime_gate.status === "declined", "non-engineering request should decline cutepower intake");
+  assert(explicitDecline.execution_policy.direct_execution_allowed, "only explicit decline should allow direct fallback execution");
+
+  for (const protectedSkill of bugFix.execution_policy.protected_execution_skills) {
+    assert(
+      ["cute-repo-change", "cute-board-run", "cute-code-review", "cute-writeback"].includes(protectedSkill),
+      `unexpected protected skill: ${protectedSkill}`
+    );
+  }
 
   console.log("cutepower task intake tests passed");
 }

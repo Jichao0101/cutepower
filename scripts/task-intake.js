@@ -41,6 +41,18 @@ function detectRuntimeDiscovery(taskGoal, docs) {
   };
 }
 
+function detectEngineeringSignal(taskGoal, docs) {
+  const activation = docs["task-normalization"].activation || {};
+  const text = normalizeText(taskGoal);
+  const matchedTerms = (activation.engineering_signal_terms || []).filter((term) => text.includes(String(term).toLowerCase()));
+
+  return {
+    requested: matchedTerms.length > 0,
+    matched_terms: matchedTerms,
+    prefer_intake: activation.prefer_intake_for_engineering_signals === true
+  };
+}
+
 function summarizeContextRequirements(taskProfile, runtimeDiscovery) {
   const requirements = [];
 
@@ -133,13 +145,14 @@ function buildHandoff(taskProfile, route) {
   };
 }
 
-function buildRouteResolution(taskProfile, route, docs) {
+function buildRouteResolution(taskProfile, route, docs, engineeringSignal) {
   const activation = docs["task-normalization"].activation;
   const autostartPrimaryTypes = new Set(activation.autostart_primary_types || []);
 
   return {
     entry_skill: activation.entry_skill,
     autostart_enabled: autostartPrimaryTypes.has(taskProfile.primary_type),
+    engineering_signal_detected: engineeringSignal.requested,
     primary_type: taskProfile.primary_type,
     primary_type_status: taskProfile.primary_type_status,
     route_id: taskProfile.route_id,
@@ -149,8 +162,8 @@ function buildRouteResolution(taskProfile, route, docs) {
   };
 }
 
-function buildRuntimeGate(taskProfile, routeResolution, blockingGaps) {
-  if (!routeResolution.autostart_enabled) {
+function buildRuntimeGate(taskProfile, routeResolution, blockingGaps, engineeringSignal) {
+  if (!routeResolution.autostart_enabled && !(engineeringSignal.prefer_intake && engineeringSignal.requested)) {
     return {
       status: "declined",
       reason: "primary_type_not_autostarted",
@@ -161,7 +174,7 @@ function buildRuntimeGate(taskProfile, routeResolution, blockingGaps) {
   if (taskProfile.primary_type_status !== "resolved" || taskProfile.route_status !== "resolved") {
     return {
       status: "clarification_required",
-      reason: "route_resolution_incomplete",
+      reason: routeResolution.autostart_enabled ? "route_resolution_incomplete" : "engineering_signal_requires_intake_resolution",
       fallback_allowed: false
     };
   }
@@ -181,6 +194,18 @@ function buildRuntimeGate(taskProfile, routeResolution, blockingGaps) {
   };
 }
 
+function buildExecutionPolicy(runtimeGate, docs) {
+  const protectedSkills = docs["task-normalization"].activation.runtime_entry.protected_execution_skills || [];
+  return {
+    direct_execution_allowed: runtimeGate.status === "declined",
+    direct_execution_reason: runtimeGate.status === "declined" ? "cutepower_declined" : "intake_required_before_execution",
+    protected_execution_skills: protectedSkills,
+    requires_successful_task_profile: true,
+    requires_successful_route_resolution: true,
+    requires_intake_acceptance_for_handoff: true
+  };
+}
+
 function buildIntakePackage(request, docs = loadContracts()) {
   if (!request || typeof request !== "object") {
     throw intakeError("task intake request must be an object");
@@ -192,10 +217,12 @@ function buildIntakePackage(request, docs = loadContracts()) {
   const taskProfile = buildTaskProfile(request, docs);
   const route = getRouteById(taskProfile.route_id, docs);
   const runtimeDiscovery = detectRuntimeDiscovery(request.task_goal, docs);
-  const routeResolution = buildRouteResolution(taskProfile, route, docs);
+  const engineeringSignal = detectEngineeringSignal(request.task_goal, docs);
+  const routeResolution = buildRouteResolution(taskProfile, route, docs, engineeringSignal);
   const contextRequirements = summarizeContextRequirements(taskProfile, runtimeDiscovery);
   const blockingGaps = buildBlockingGaps(taskProfile, route, request, docs, runtimeDiscovery);
-  const runtimeGate = buildRuntimeGate(taskProfile, routeResolution, blockingGaps);
+  const runtimeGate = buildRuntimeGate(taskProfile, routeResolution, blockingGaps, engineeringSignal);
+  const executionPolicy = buildExecutionPolicy(runtimeGate, docs);
 
   return {
     entry_skill: docs["task-normalization"].activation.entry_skill,
@@ -208,8 +235,10 @@ function buildIntakePackage(request, docs = loadContracts()) {
     context_requirements: contextRequirements,
     blocking_gaps: blockingGaps,
     runtime_discovery: runtimeDiscovery,
+    engineering_signal: engineeringSignal,
     skill_handoff: runtimeGate.status === "ready" ? buildHandoff(taskProfile, route) : null,
-    runtime_gate: runtimeGate
+    runtime_gate: runtimeGate,
+    execution_policy: executionPolicy
   };
 }
 
@@ -240,5 +269,6 @@ if (require.main === module) {
 
 module.exports = {
   buildIntakePackage,
-  detectRuntimeDiscovery
+  detectRuntimeDiscovery,
+  detectEngineeringSignal
 };

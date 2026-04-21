@@ -10,12 +10,54 @@
       "incident_investigation",
       "audit"
     ],
+    "prefer_intake_for_engineering_signals": true,
+    "engineering_signal_terms": [
+      "repo",
+      "repository",
+      "code",
+      "source",
+      "build",
+      "compile",
+      "test",
+      "failing",
+      "failure",
+      "ci",
+      "crash",
+      "error",
+      "issue",
+      "debug",
+      "investigate",
+      "board",
+      "device",
+      "deploy",
+      "log",
+      "fix",
+      "implement",
+      "refactor",
+      "修改",
+      "修复",
+      "排查",
+      "定位",
+      "代码",
+      "仓库",
+      "编译",
+      "测试",
+      "日志",
+      "上板",
+      "真机"
+    ],
     "fallback_behavior": "fallback_when_cutepower_declines",
     "runtime_entry": {
       "intake_script": "scripts/task-intake.js",
       "route_resolution_output": "route_resolution",
       "blocking_gaps_output": "blocking_gaps",
-      "runtime_gate_output": "runtime_gate"
+      "runtime_gate_output": "runtime_gate",
+      "protected_execution_skills": [
+        "cute-repo-change",
+        "cute-board-run",
+        "cute-code-review",
+        "cute-writeback"
+      ]
     },
     "runtime_discovery": {
       "keywords": [

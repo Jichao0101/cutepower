@@ -26,6 +26,6 @@
       "Read",
       "Write"
     ],
-    "defaultPrompt": "Run cutepower intake first for engineering tasks, resolve route and blocking gaps, then hand off to the route-specific skill chain."
+    "defaultPrompt": "Use cutepower intake first for engineering tasks, then hand off after route resolution, gap checks, and runtime gating."
   }
 }

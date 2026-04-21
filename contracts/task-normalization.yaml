@@ -3,7 +3,39 @@
   "activation": {
     "mode": "natural_language_autostart",
     "entry_skill": "using-cutepower",
-    "profile_output": "task_profile"
+    "profile_output": "task_profile",
+    "autostart_primary_types": [
+      "implementation",
+      "bug_fix",
+      "incident_investigation",
+      "audit"
+    ],
+    "fallback_behavior": "fallback_when_cutepower_declines",
+    "runtime_entry": {
+      "intake_script": "scripts/task-intake.js",
+      "route_resolution_output": "route_resolution",
+      "blocking_gaps_output": "blocking_gaps",
+      "runtime_gate_output": "runtime_gate"
+    },
+    "runtime_discovery": {
+      "keywords": [
+        "runtime",
+        "plugin",
+        "plugins",
+        "marketplace",
+        "hook",
+        "hooks",
+        "autostart",
+        "entry",
+        ".codex",
+        ".agents",
+        "codex config"
+      ],
+      "allowed_roots": [
+        "~/.codex",
+        "~/.agents"
+      ]
+    }
   },
   "primary_type_rules": [
     {

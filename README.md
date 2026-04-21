@@ -34,7 +34,6 @@ Current non-goals:
 
 - P2 skills
 - complex hooks
-- automatic runtime hook enforcement
 - automatic remediation
 
 Installed-plugin boundaries:
@@ -46,8 +45,10 @@ Installed-plugin boundaries:
 - `scripts/validate-contracts.js` provides static contract validation
 - `scripts/runtime-gates.js` provides a minimal runtime gate evaluator for route, role, review, and writeback requests
 - `scripts/task-profile.js` provides natural-language task normalization into a routed task profile
+- `scripts/task-intake.js` provides the default-entry intake/preflight layer for route resolution, blocking gaps, runtime discovery, and skill handoff
 - `scripts/test-runtime-gates.js` provides positive and negative gate checks
 - `scripts/test-task-profile.js` provides natural-language routing and safety checks
+- `scripts/test-task-intake.js` provides default-entry takeover and fallback coverage
 
 Runtime hardening coverage:
 
@@ -69,4 +70,5 @@ node scripts/test-install-plugin.js
 node scripts/validate-contracts.js
 node scripts/test-runtime-gates.js
 node scripts/test-task-profile.js
+node scripts/test-task-intake.js
 ```

@@ -73,6 +73,7 @@ node scripts/test-install-plugin.js
 node scripts/validate-contracts.js
 node scripts/test-runtime-gates.js
 node scripts/test-task-profile.js
+node scripts/test-task-intake.js
 ```
 
 For a personal install, also verify:

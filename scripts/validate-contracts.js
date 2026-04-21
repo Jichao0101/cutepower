@@ -49,6 +49,13 @@ function ensureSkillExists(skillName) {
   }
 }
 
+function ensurePluginPathExists(relativePath, description) {
+  const fullPath = path.join(pluginRoot, relativePath);
+  if (!fs.existsSync(fullPath)) {
+    throw new Error(`${description} is missing: ${relativePath}`);
+  }
+}
+
 function main() {
   const index = readJsonLike("contracts/contract-index.yaml");
   const indexSchema = readJsonLike("schemas/contract-index.schema.json");
@@ -80,8 +87,30 @@ function main() {
   ensureArray("task-normalization.primary_type_rules", docs["task-normalization"].primary_type_rules);
   ensureArray("task-normalization.modifier_rules", docs["task-normalization"].modifier_rules);
   ensureArray("task-normalization.context_rules", docs["task-normalization"].context_rules);
-  ensureKeys("task-normalization.activation", docs["task-normalization"].activation, ["mode", "entry_skill", "profile_output"]);
+  ensureKeys("task-normalization.activation", docs["task-normalization"].activation, [
+    "mode",
+    "entry_skill",
+    "profile_output",
+    "autostart_primary_types",
+    "fallback_behavior",
+    "runtime_entry",
+    "runtime_discovery"
+  ]);
   ensureSkillExists(docs["task-normalization"].activation.entry_skill);
+  ensureArray("task-normalization.activation.autostart_primary_types", docs["task-normalization"].activation.autostart_primary_types);
+  ensureKeys("task-normalization.activation.runtime_entry", docs["task-normalization"].activation.runtime_entry, [
+    "intake_script",
+    "route_resolution_output",
+    "blocking_gaps_output",
+    "runtime_gate_output"
+  ]);
+  ensurePluginPathExists(docs["task-normalization"].activation.runtime_entry.intake_script, "task-normalization runtime intake script");
+  ensureKeys("task-normalization.activation.runtime_discovery", docs["task-normalization"].activation.runtime_discovery, [
+    "keywords",
+    "allowed_roots"
+  ]);
+  ensureArray("task-normalization.activation.runtime_discovery.keywords", docs["task-normalization"].activation.runtime_discovery.keywords);
+  ensureArray("task-normalization.activation.runtime_discovery.allowed_roots", docs["task-normalization"].activation.runtime_discovery.allowed_roots);
   ensureKeys("task-normalization.guardrails", docs["task-normalization"].guardrails, [
     "strip_write_modifiers_when_read_only",
     "never_infer_board_target",

@@ -1,0 +1,4 @@
+interface:
+  display_name: "cutepower"
+  short_description: "Route engineering tasks through cutepower intake before repo, review, board, or writeback work starts"
+  default_prompt: "Use cutepower intake first for implementation, bug-fix, audit, or incident requests, then hand off only after route resolution, blocking-gap checks, and runtime gating."

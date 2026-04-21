@@ -6,7 +6,17 @@
     "name": "Jichao"
   },
   "license": "MIT",
+  "keywords": [
+    "coding",
+    "implementation",
+    "bug-fix",
+    "audit",
+    "incident",
+    "routing",
+    "governance"
+  ],
   "skills": "./skills/",
+  "agents": "./agents/",
   "interface": {
     "displayName": "cutepower",
     "shortDescription": "P0 contracts-first governance plugin for Agent Workflow.",
@@ -15,6 +25,7 @@
     "capabilities": [
       "Read",
       "Write"
-    ]
+    ],
+    "defaultPrompt": "Run cutepower intake first for engineering tasks, resolve route and blocking gaps, then hand off to the route-specific skill chain."
   }
 }

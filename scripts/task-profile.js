@@ -55,7 +55,7 @@ function inferPrimaryType(taskGoal, contract) {
 
   const winner = scored[0];
   const runnerUp = scored[1];
-  const ambiguous = runnerUp && runnerUp.match_count === winner.match_count;
+  const ambiguous = runnerUp && runnerUp.match_count === winner.match_count && runnerUp.priority === winner.priority;
 
   return {
     primary_type: ambiguous ? null : winner.primary_type,

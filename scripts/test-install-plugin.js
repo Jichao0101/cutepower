@@ -25,8 +25,10 @@ function main() {
 
   run(["--mode", "personal", "--home", fakeHome]);
   const personalPlugin = path.join(fakeHome, ".codex", "plugins", "cutepower", ".codex-plugin", "plugin.json");
+  const personalAgent = path.join(fakeHome, ".codex", "plugins", "cutepower", "agents", "openai.yaml");
   const personalMarketplace = path.join(fakeHome, ".agents", "plugins", "marketplace.json");
   assert(fs.existsSync(personalPlugin), "personal install did not create plugin manifest");
+  assert(fs.existsSync(personalAgent), "personal install did not copy runtime agent metadata");
   assert(fs.existsSync(personalMarketplace), "personal install did not create marketplace");
   assert(
     readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").source.path === "./.codex/plugins/cutepower",
@@ -35,8 +37,10 @@ function main() {
 
   run(["--mode", "repo", "--target-root", fakeRepoRoot]);
   const repoPlugin = path.join(fakeRepoRoot, "plugins", "cutepower", ".codex-plugin", "plugin.json");
+  const repoAgent = path.join(fakeRepoRoot, "plugins", "cutepower", "agents", "openai.yaml");
   const repoMarketplace = path.join(fakeRepoRoot, ".agents", "plugins", "marketplace.json");
   assert(fs.existsSync(repoPlugin), "repo install did not create plugin manifest");
+  assert(fs.existsSync(repoAgent), "repo install did not copy runtime agent metadata");
   assert(fs.existsSync(repoMarketplace), "repo install did not create marketplace");
   assert(
     readJson(repoMarketplace).plugins.find((plugin) => plugin.name === "cutepower").source.path === "./plugins/cutepower",

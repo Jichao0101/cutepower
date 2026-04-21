@@ -79,11 +79,11 @@ function resolveLayout(options) {
     const homeRoot = path.resolve(options.home);
     return {
       installRoot: homeRoot,
-      installDir: path.join(homeRoot, ".codex", "plugins", pluginName),
+      installDir: path.join(homeRoot, "plugins", pluginName),
       marketplacePath: path.join(homeRoot, ".agents", "plugins", "marketplace.json"),
       marketplaceName: "personal-local",
       marketplaceDisplayName: "Personal Local",
-      sourcePath: `./.codex/plugins/${pluginName}`
+      sourcePath: `./plugins/${pluginName}`
     };
   }
 
@@ -187,7 +187,7 @@ function writeMarketplace(layout) {
       path: layout.sourcePath
     },
     policy: {
-      installation: "INSTALLED",
+      installation: "AVAILABLE",
       authentication: "ON_INSTALL"
     },
     category: "Productivity"

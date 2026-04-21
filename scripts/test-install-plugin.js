@@ -24,18 +24,18 @@ function main() {
   fs.mkdirSync(fakeRepoRoot, { recursive: true });
 
   run(["--mode", "personal", "--home", fakeHome]);
-  const personalPlugin = path.join(fakeHome, ".codex", "plugins", "cutepower", ".codex-plugin", "plugin.json");
-  const personalAgent = path.join(fakeHome, ".codex", "plugins", "cutepower", "agents", "openai.yaml");
+  const personalPlugin = path.join(fakeHome, "plugins", "cutepower", ".codex-plugin", "plugin.json");
+  const personalAgent = path.join(fakeHome, "plugins", "cutepower", "agents", "openai.yaml");
   const personalMarketplace = path.join(fakeHome, ".agents", "plugins", "marketplace.json");
   assert(fs.existsSync(personalPlugin), "personal install did not create plugin manifest");
   assert(fs.existsSync(personalAgent), "personal install did not copy runtime agent metadata");
   assert(fs.existsSync(personalMarketplace), "personal install did not create marketplace");
   assert(
-    readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").source.path === "./.codex/plugins/cutepower",
+    readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").source.path === "./plugins/cutepower",
     "personal marketplace path is incorrect"
   );
   assert(
-    readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").policy.installation === "INSTALLED",
+    readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").policy.installation === "AVAILABLE",
     "personal marketplace installation policy is incorrect"
   );
 
@@ -51,7 +51,7 @@ function main() {
     "repo marketplace path is incorrect"
   );
   assert(
-    readJson(repoMarketplace).plugins.find((plugin) => plugin.name === "cutepower").policy.installation === "INSTALLED",
+    readJson(repoMarketplace).plugins.find((plugin) => plugin.name === "cutepower").policy.installation === "AVAILABLE",
     "repo marketplace installation policy is incorrect"
   );
 

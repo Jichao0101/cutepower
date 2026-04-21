@@ -3,11 +3,12 @@
 cutepower has two distinct states:
 
 - development source: the git repository you edit
-- runtime source: the local plugin copy and marketplace entry that make `cutepower` installed in `/plugins`
+- staged source: the local plugin copy and marketplace entry that make `cutepower` discoverable in `/plugins`
+- installed runtime: the plugin state after you explicitly choose `Install Plugin` in Codex
 
 Do not use the development repository root as the default runtime truth source.
 
-For normal use, installation is a one-time setup per target location. After running the install script, `cutepower` should show as `installed` in `/plugins`. You do not need a second `/plugins` install step, and you do not need to repeat the script for every Codex session unless you are refreshing the installed plugin source after changes.
+For normal use, staging is a one-time setup per target location. After running the install script, `cutepower` should show as available in `/plugins`. You still need the `/plugins` install step once per Codex runtime, and you do not need to repeat the script for every session unless you are refreshing the staged plugin source after changes.
 
 Current plugin stage:
 
@@ -30,12 +31,12 @@ node scripts/install-plugin.js --mode personal
 This bootstraps:
 
 ```text
-~/.codex/plugins/cutepower/
+~/plugins/cutepower/
 ~/.agents/plugins/marketplace.json
 ```
 
-The marketplace entry points to `./.codex/plugins/cutepower`, so discovery stays under the user home instead of the development repository path.
-After this, open `/plugins` and confirm `cutepower` is already marked `installed`.
+The marketplace entry points to `./plugins/cutepower`, so discovery stays under the user home instead of the development repository path.
+After this, open `/plugins`, search `cutepower`, and choose `Install Plugin`.
 
 ## Repo-scoped install
 
@@ -53,7 +54,7 @@ This bootstraps:
 ```
 
 The repo marketplace entry points to `./plugins/cutepower`, so discovery stays relative to the repo root.
-After this, open `/plugins` in the repo-scoped Codex session and confirm `cutepower` is already marked `installed`.
+After this, open `/plugins` in the repo-scoped Codex session, search `cutepower`, and choose `Install Plugin`.
 
 ## Force replace an existing install
 
@@ -68,7 +69,7 @@ node scripts/install-plugin.js --mode repo --target-root <repo-root> --force
 
 1. Confirm the runtime source is the installed copy, not the development repository.
 2. Confirm the marketplace path is relative to the install root.
-3. Open `/plugins` and confirm `cutepower` is discoverable and marked `installed`.
+3. Open `/plugins`, confirm `cutepower` is discoverable, then choose `Install Plugin`.
 4. Run validation from the bootstrapped plugin copy.
 
 Recommended commands:
@@ -84,7 +85,7 @@ node scripts/test-task-intake.js
 For a personal install, also verify:
 
 ```bash
-test -f ~/.codex/plugins/cutepower/.codex-plugin/plugin.json
+test -f ~/plugins/cutepower/.codex-plugin/plugin.json
 test -f ~/.agents/plugins/marketplace.json
 ```
 
@@ -113,7 +114,7 @@ node scripts/install-plugin.js --mode repo --target-root <repo-root> --force
 
 ## Uninstalling
 
-- personal install: remove `~/.codex/plugins/cutepower` and delete or edit the cutepower entry in `~/.agents/plugins/marketplace.json`
+- personal install: remove `~/plugins/cutepower` and delete or edit the cutepower entry in `~/.agents/plugins/marketplace.json`
 - repo install: remove `<repo-root>/plugins/cutepower` and delete or edit the cutepower entry in `<repo-root>/.agents/plugins/marketplace.json`
 
 ## Migrating from direct-link installs

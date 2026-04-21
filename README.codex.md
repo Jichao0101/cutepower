@@ -10,7 +10,8 @@ Fetch and follow instructions from .codex/INSTALL.md
 
 Current repository note:
 
-- cutepower should be used as an independent repository rooted at the current directory.
+- the current repository is the development source, not the default runtime install source
+- install cutepower into a user or repo plugin directory before treating it as runtime truth
 - Do not treat a host knowledge repository as the code root for this project.
 
 Current installed scope:
@@ -26,7 +27,7 @@ Current installed scope:
 
 Testing note:
 
-- keep the cutepower repository root as the only active truth source during plugin tests
+- keep plugin tests pinned to the installed copy or an explicitly generated repo-local install
 - do not import external project baselines into plugin truth resolution
 
 After installation, use [README.md](README.md) for the installed plugin overview.

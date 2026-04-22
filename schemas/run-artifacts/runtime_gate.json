@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_id": "cutepower.run-artifact/runtime_gate/v1",
+  "required": [
+    "schema",
+    "artifact_type",
+    "session_id",
+    "route_id",
+    "phase",
+    "generated_at",
+    "payload"
+  ],
+  "properties": {
+    "schema": { "const": "cutepower.run-artifact/runtime_gate/v1" },
+    "artifact_type": { "const": "runtime_gate" },
+    "session_id": { "type": "string" },
+    "route_id": { "type": "string" },
+    "phase": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "payload": { "type": "object" }
+  },
+  "payload_required": [
+    "status",
+    "reason",
+    "fallback_allowed"
+  ],
+  "payload_properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "blocked",
+        "clarification_required",
+        "declined"
+      ]
+    }
+  }
+}

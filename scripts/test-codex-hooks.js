@@ -5,6 +5,8 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+const { loadRunSession, writeArtifact, syncRunSession } = require("./run-artifacts");
+
 const repoRoot = path.resolve(__dirname, "..");
 const hookStatePath = path.join(
   os.tmpdir(),
@@ -37,11 +39,46 @@ function readState() {
   return JSON.parse(fs.readFileSync(hookStatePath, "utf8"));
 }
 
+function recordReviewClosure(state, includeWriteback) {
+  const session = syncRunSession(path.join(state.action_guard.artifact_dir, "session.json"));
+  writeArtifact(session, "evidence_manifest", {
+    evidence_items: [
+      {
+        kind: "verification_result",
+        path: "artifacts/test.log"
+      }
+    ]
+  }, { phase: "review_active" });
+  writeArtifact(session, "review_decision", {
+    review_type: "functional_review",
+    outcome: "pass",
+    reviewer_role_id: "functional-reviewer",
+    reviewer_instance_id: "functional-reviewer-1",
+    evidence_keys: [
+      "requirements_package",
+      "acceptance_items",
+      "interface_contracts",
+      "evidence_package"
+    ]
+  }, { phase: "review_active" });
+
+  if (includeWriteback) {
+    writeArtifact(session, "writeback_receipt", {
+      writeback_level: "project_current_update",
+      approval_gate: "review",
+      actor_role_id: "workflow-orchestrator",
+      pass_statuses: ["functional_review_passed"]
+    }, { phase: "writeback_ready" });
+  }
+
+  syncRunSession(session);
+}
+
 function main() {
   resetState();
 
   const promptHook = runHook("user-prompt-submit", {
-    prompt: "按 cutepower 执行，修复 repo 启动回归并更新代码。"
+    prompt: "按 cutepower 执行，只读 audit 当前行为并做 functional review。"
   });
   assert(promptHook.status === 0, "UserPromptSubmit hook should succeed");
 
@@ -70,71 +107,34 @@ function main() {
   });
   assert(runtimeRead.status === 0, "PreToolUse should allow runtime discovery before ready");
 
+  const unmapped = runHook("pre-tool-use", {
+    tool_name: "UnknownTool",
+    payload: {
+      x: 1
+    }
+  });
+  assert(unmapped.status !== 0, "unmapped event should be denied in explicit mode");
+  assert(
+    readState().denied_events.some((event) => event.error.includes("unmapped tool event denied")),
+    "unmapped denial should be recorded"
+  );
+
   const readyState = readState();
   readyState.action_guard.intake_status = "accepted";
   readyState.action_guard.route_status = "resolved";
   readyState.action_guard.runtime_gate_status = "ready";
   fs.writeFileSync(hookStatePath, `${JSON.stringify(readyState, null, 2)}\n`, "utf8");
 
-  const selfReview = runHook("pre-tool-use", {
-    cutepower_request: {
-      request_type: "review_decision",
-      route_id: "bug_fix_default",
-      skill_id: "cute-code-review",
-      role_id: "repo-reviewer",
-      state: "review",
-      review_type: "repo_review",
-      requested_actions: ["review_decision"],
-      evidence_keys: [
-        "task_goal",
-        "implementation_plan",
-        "diff_summary",
-        "verification_results",
-        "verification_tier",
-        "necessary_code_context"
-      ],
-      author_stage_id: "review",
-      reviewer_stage_id: "review",
-      author_instance_id: "author-1",
-      reviewer_instance_id: "author-1"
-    }
-  });
-  assert(selfReview.status !== 0, "PreToolUse should block author self-review");
-  assert(
-    readState().denied_events.some((event) => event.error.includes("review requires a separate reviewer stage or instance")),
-    "self-review should fail independent review check"
-  );
+  const stopWithoutReview = runHook("stop", {});
+  assert(stopWithoutReview.status !== 0, "stop should fail when closure artifacts are missing");
 
-  const writeback = runHook("pre-tool-use", {
-    cutepower_request: {
-      request_type: "writeback",
-      route_id: "bug_fix_default",
-      scenario: "default",
-      approval_gate: "review",
-      writeback_level: "project_current_update",
-      pass_statuses: [],
-      actor_role_id: "workflow-orchestrator",
-      author_instance_id: "author-1",
-      adjudication: {
-        adjudicator_instance_id: "orchestrator-1"
-      },
-      completed_preconditions: [
-        "writeback_state_reached",
-        "route_writeback_requirements_satisfied",
-        "independent_writeback_adjudication"
-      ]
-    }
-  });
-  assert(writeback.status !== 0, "PreToolUse should block writeback without required passes");
-  assert(
-    readState().denied_events.some((event) => event.error.includes("missing required pass status repo_review_passed")),
-    "writeback failure should report missing pass status"
-  );
+  recordReviewClosure(readState(), false);
+  const stopWithoutWriteback = runHook("stop", {});
+  assert(stopWithoutWriteback.status !== 0, "stop should fail when writeback receipt is missing");
 
-  const stopHook = runHook("stop", {});
-  assert(stopHook.status === 0, "Stop hook should succeed");
-  const finalState = readState();
-  assert(finalState.denied_events.length >= 3, "hook state should record denied events");
+  recordReviewClosure(readState(), true);
+  const stopComplete = runHook("stop", {});
+  assert(stopComplete.status === 0, "stop should succeed after closed-loop artifacts are present");
 
   console.log("cutepower codex hooks tests passed");
 }

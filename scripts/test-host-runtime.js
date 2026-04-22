@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
+const fs = require("fs");
 const path = require("path");
 
 const { buildSessionContextEnvelope, evaluateActionWithSession, prepareActionRequest } = require("./host-runtime");
+const { getArtifactPath, readArtifact } = require("./run-artifacts");
 
 const cwd = path.resolve(__dirname, "..");
 
@@ -34,15 +36,11 @@ function main() {
   });
 
   assert(explicitEnvelope.host_runtime.explicit_mode, "explicit cutepower request should enable host runtime injection");
-  assert(explicitEnvelope.host_runtime.inject_session_context, "explicit cutepower request should inject session context");
-  assert(
-    explicitEnvelope.host_runtime.session_context.warning_lines.some((line) => line.includes("cutepower explicit mode")),
-    "session context should include explicit mode warning"
-  );
-  assert(
-    explicitEnvelope.host_runtime.session_context.required_preflight_outputs.includes("task_profile"),
-    "session context should require task_profile before execution"
-  );
+  assert(explicitEnvelope.host_runtime.session_context.session_id, "session context should expose session_id");
+  assert(explicitEnvelope.host_runtime.session_context.artifact_dir, "session context should expose artifact_dir");
+  assert(explicitEnvelope.host_runtime.session_capability.session_id === explicitEnvelope.intake_package.session_id, "session capability should bind to intake session");
+  assert(explicitEnvelope.intake_package.phase === "gate_ready", "accepted repo change should reach gate_ready");
+  assert(readArtifact(explicitEnvelope.intake_package.artifact_plan.artifact_dir, "task_profile"), "task_profile artifact should exist on disk");
 
   const preIntakeReadEnvelope = buildSessionContextEnvelope({
     task_goal: "按 cutepower 执行，先看一下 runtime hook。",
@@ -86,6 +84,25 @@ function main() {
       requested_actions: ["runtime_discovery_read"]
     },
     preIntakeReadEnvelope
+  );
+
+  const readyBusinessRead = prepareActionRequest(
+    {
+      request_type: "skill_invocation",
+      route_id: explicitEnvelope.intake_package.route_resolution.route_id,
+      skill_id: "using-cutepower",
+      role_id: "workflow-orchestrator",
+      requested_actions: ["business_context_read"]
+    },
+    explicitEnvelope
+  );
+  assert(readyBusinessRead.session_capability, "ready request should receive a derived session capability");
+
+  const taskProfilePath = getArtifactPath(explicitEnvelope.intake_package.artifact_plan.artifact_dir, "task_profile");
+  fs.rmSync(taskProfilePath, { force: true });
+  expectThrows(
+    () => evaluateActionWithSession(readyBusinessRead, explicitEnvelope),
+    "phase admission requires artifact task_profile"
   );
 
   const declineEnvelope = buildSessionContextEnvelope({

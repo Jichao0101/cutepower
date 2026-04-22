@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_id": "cutepower.run-artifact/writeback_receipt/v1",
+  "required": [
+    "schema",
+    "artifact_type",
+    "session_id",
+    "route_id",
+    "phase",
+    "generated_at",
+    "payload"
+  ],
+  "properties": {
+    "schema": { "const": "cutepower.run-artifact/writeback_receipt/v1" },
+    "artifact_type": { "const": "writeback_receipt" },
+    "session_id": { "type": "string" },
+    "route_id": { "type": "string" },
+    "phase": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "payload": { "type": "object" }
+  },
+  "payload_required": [
+    "writeback_level",
+    "approval_gate",
+    "actor_role_id",
+    "pass_statuses"
+  ],
+  "payload_properties": {
+    "writeback_level": { "type": "string" },
+    "approval_gate": { "type": "string" },
+    "actor_role_id": { "type": "string" },
+    "pass_statuses": { "type": "array" }
+  }
+}

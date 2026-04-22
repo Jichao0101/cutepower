@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_id": "cutepower.run-artifact/task_profile/v1",
+  "required": [
+    "schema",
+    "artifact_type",
+    "session_id",
+    "route_id",
+    "phase",
+    "generated_at",
+    "payload"
+  ],
+  "properties": {
+    "schema": { "const": "cutepower.run-artifact/task_profile/v1" },
+    "artifact_type": { "const": "task_profile" },
+    "session_id": { "type": "string" },
+    "route_id": { "type": "string" },
+    "phase": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "payload": { "type": "object" }
+  },
+  "payload_required": [
+    "primary_type_status",
+    "route_status",
+    "task_modifiers",
+    "missing_context",
+    "inferred_context"
+  ]
+}

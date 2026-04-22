@@ -58,21 +58,44 @@ Installed-plugin boundaries:
 - `AGENTS.md` is a thin runtime bridge with hard stops
 - `agents/*.toml` is a compatibility bridge, not a policy source
 - `scripts/validate-contracts.js` provides static contract validation
-- `scripts/host-runtime.js` provides the host-side explicit-mode session-context injection package and action-guard bridge
-- `scripts/codex-hooks.js` wires Codex lifecycle hooks to `host-runtime` and `runtime-gates` through workspace-scoped hook state
-- `scripts/runtime-gates.js` provides action-front runtime admission checks for route, role, review, and writeback requests
 - `scripts/task-profile.js` provides natural-language task normalization into a routed task profile
-- `scripts/task-intake.js` provides the default-entry intake/preflight layer for route resolution, blocking gaps, runtime discovery, and skill handoff
+- `scripts/task-intake.js` provides the default-entry intake/preflight layer, allocates `session_id`, and writes repo-local preflight artifacts under `.cutepower/run/<session_id>/`
+- `scripts/host-runtime.js` provides host-side explicit-mode session-context injection and issues session capabilities bound to `session_id`, `route_id`, `phase`, and `allowed_actions`
+- `scripts/runtime-gates.js` provides action-front runtime admission checks for route, role, review, writeback, capability, phase, and artifact existence/schema
+- `scripts/codex-hooks.js` wires Codex lifecycle hooks to `host-runtime` and `runtime-gates` through workspace-scoped hook state and stop-time completion gating
+- `scripts/run-artifacts.js` manages repo-local run-state artifacts and schema validation
+- `schemas/run-artifacts/` defines stable runtime artifact schemas
 - `scripts/test-runtime-gates.js` provides positive and negative gate checks
 - `scripts/test-task-profile.js` provides natural-language routing and safety checks
 - `scripts/test-task-intake.js` provides default-entry takeover and fallback coverage
 
 Runtime hardening coverage:
 
+- explicit mode now defaults to deny for unmapped tool events
 - route/writeback requests are checked against `route_writeback_matrix`
 - review-stage `board_execute` is rejected and board artifact collection is separately gated
 - runtime requests reject legacy `reviewer` aliases
 - repo-reviewer, functional-reviewer, and incident-investigator stay separated by route and action gates
+- protected business execution, review, and writeback now require a host-issued session capability
+- ready-state execution now depends on repo-local preflight artifacts instead of session-context hints alone
+- stop-hook success now depends on legal terminal state plus required closure artifacts:
+  - `evidence_manifest`
+  - `review_decision` when review is required
+  - `writeback_receipt` or `writeback_declined` when writeback is required
+
+Run-state model:
+
+- repo-local run state lives under `.cutepower/run/<session_id>/`
+- stable runtime artifacts include:
+  - `task_profile.json`
+  - `route_resolution.json`
+  - `runtime_gate.json`
+  - `context_requirements.json`
+  - `blocking_gaps.json`
+  - `evidence_manifest.json`
+  - `review_decision.json`
+  - `writeback_receipt.json`
+  - `writeback_declined.json`
 
 Testing note:
 
@@ -90,4 +113,5 @@ node scripts/validate-contracts.js
 node scripts/test-runtime-gates.js
 node scripts/test-task-profile.js
 node scripts/test-task-intake.js
+node scripts/run-artifacts.js status .cutepower/run/<session_id>
 ```

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_id": "cutepower.run-artifact/route_resolution/v1",
+  "required": [
+    "schema",
+    "artifact_type",
+    "session_id",
+    "route_id",
+    "phase",
+    "generated_at",
+    "payload"
+  ],
+  "properties": {
+    "schema": { "const": "cutepower.run-artifact/route_resolution/v1" },
+    "artifact_type": { "const": "route_resolution" },
+    "session_id": { "type": "string" },
+    "route_id": { "type": "string" },
+    "phase": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "payload": { "type": "object" }
+  },
+  "payload_required": [
+    "route_id",
+    "route_status",
+    "primary_type",
+    "primary_type_status",
+    "skill_chain"
+  ]
+}

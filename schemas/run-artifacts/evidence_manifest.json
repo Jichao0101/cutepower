@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_id": "cutepower.run-artifact/evidence_manifest/v1",
+  "required": [
+    "schema",
+    "artifact_type",
+    "session_id",
+    "route_id",
+    "phase",
+    "generated_at",
+    "payload"
+  ],
+  "properties": {
+    "schema": { "const": "cutepower.run-artifact/evidence_manifest/v1" },
+    "artifact_type": { "const": "evidence_manifest" },
+    "session_id": { "type": "string" },
+    "route_id": { "type": "string" },
+    "phase": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "payload": { "type": "object" }
+  },
+  "payload_required": [
+    "evidence_items"
+  ],
+  "payload_properties": {
+    "evidence_items": { "type": "array" }
+  }
+}

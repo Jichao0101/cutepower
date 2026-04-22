@@ -3,6 +3,14 @@
 const fs = require("fs");
 const path = require("path");
 
+const {
+  deriveCurrentPhase,
+  getRequiredArtifactsForPhase,
+  loadRunSession,
+  readArtifact,
+  validateCompletion
+} = require("./run-artifacts");
+
 const pluginRoot = path.resolve(__dirname, "..");
 
 function readJsonLike(relativePath) {
@@ -144,6 +152,157 @@ function assertExplicitCutepowerRuntimeLock(request, docs) {
       route_status: routeStatus,
       runtime_gate_status: runtimeGateStatus
     });
+  }
+}
+
+function getRequestedActions(request) {
+  if (Array.isArray(request.requested_actions)) {
+    return request.requested_actions;
+  }
+  if (request.request_type === "writeback") {
+    return [request.writeback_level];
+  }
+  return [];
+}
+
+function loadSessionForRequest(request) {
+  const capabilityDir = request.session_capability?.artifact_dir;
+  const artifactDir = request.artifact_dir || capabilityDir;
+  if (!artifactDir) {
+    throw gateError("explicit runtime request requires artifact_dir", {
+      request_type: request.request_type
+    });
+  }
+  return loadRunSession(artifactDir);
+}
+
+function assertRequiredArtifactsPresent(session, artifactNames, reason) {
+  for (const artifactName of artifactNames) {
+    if (!readArtifact(session, artifactName)) {
+      throw gateError(`${reason} requires artifact ${artifactName}`, {
+        session_id: session.session_id,
+        artifact_name: artifactName
+      });
+    }
+  }
+}
+
+function assertSessionCapability(request) {
+  const actions = getRequestedActions(request);
+  const runtimeDiscoveryOnly = actions.length > 0 && actions.every((action) => action === "runtime_discovery_read");
+  if (runtimeDiscoveryOnly) {
+    return null;
+  }
+
+  const capability = request.session_capability;
+  if (!capability || typeof capability !== "object") {
+    throw gateError("explicit runtime request requires session_capability");
+  }
+
+  const session = loadSessionForRequest(request);
+  const now = Date.now();
+  const expiresAt = Date.parse(capability.expires_at || "");
+  if (!Number.isFinite(expiresAt) || expiresAt <= now) {
+    throw gateError("session capability has expired", {
+      session_id: capability.session_id
+    });
+  }
+  if (capability.capability_token !== session.capability_secret) {
+    throw gateError("session capability token mismatch", {
+      session_id: capability.session_id
+    });
+  }
+  if (capability.session_id !== session.session_id) {
+    throw gateError("session capability session mismatch", {
+      expected_session_id: session.session_id,
+      session_id: capability.session_id
+    });
+  }
+  if (capability.route_id !== (request.route_id || session.route_id)) {
+    throw gateError("session capability route mismatch", {
+      capability_route_id: capability.route_id,
+      route_id: request.route_id || session.route_id
+    });
+  }
+
+  const allowedActions = new Set(capability.allowed_actions || []);
+  for (const action of actions) {
+    if (!allowedActions.has(action)) {
+      throw gateError(`session capability does not allow action ${action}`, {
+        session_id: capability.session_id,
+        action
+      });
+    }
+  }
+
+  return session;
+}
+
+function getAllowedPhasesForRequest(request) {
+  switch (request.request_type) {
+    case "review_decision":
+      return ["review_active"];
+    case "writeback":
+      return ["writeback_ready"];
+    case "skill_invocation":
+      return ["gate_ready", "review_active"];
+    default:
+      return [];
+  }
+}
+
+function assertPhaseTransition(request, session) {
+  const actions = getRequestedActions(request);
+  const runtimeDiscoveryOnly = actions.length > 0 && actions.every((action) => action === "runtime_discovery_read");
+  if (runtimeDiscoveryOnly) {
+    return;
+  }
+
+  const derivedPhase = deriveCurrentPhase(session);
+  const allowedPhases = new Set(getAllowedPhasesForRequest(request));
+  if (!allowedPhases.has(derivedPhase)) {
+    throw gateError(`phase ${derivedPhase} does not allow ${request.request_type}`, {
+      phase: derivedPhase,
+      request_type: request.request_type
+    });
+  }
+
+  if (request.session_capability?.phase !== derivedPhase) {
+    throw gateError("session capability phase mismatch", {
+      capability_phase: request.session_capability?.phase,
+      phase: derivedPhase
+    });
+  }
+}
+
+function assertArtifactPreconditions(request, session) {
+  const actions = getRequestedActions(request);
+  const runtimeDiscoveryOnly = actions.length > 0 && actions.every((action) => action === "runtime_discovery_read");
+  if (runtimeDiscoveryOnly) {
+    return;
+  }
+
+  const phase = deriveCurrentPhase(session);
+  assertRequiredArtifactsPresent(session, getRequiredArtifactsForPhase(phase), "phase admission");
+
+  const runtimeGate = readArtifact(session, "runtime_gate");
+  if (runtimeGate?.payload?.status !== "ready") {
+    throw gateError("runtime gate is not ready for protected execution", {
+      status: runtimeGate?.payload?.status || null,
+      session_id: session.session_id
+    });
+  }
+
+  if (request.request_type === "skill_invocation") {
+    assertRequiredArtifactsPresent(session, ["task_profile"], "skill invocation");
+  }
+
+  if (request.request_type === "review_decision") {
+    assertRequiredArtifactsPresent(session, ["evidence_manifest"], "review decision");
+  }
+
+  if (request.request_type === "writeback") {
+    assertRequiredArtifactsPresent(session, ["review_decision"], "writeback");
   }
 }
 
@@ -465,6 +624,14 @@ function evaluateRuntimeRequest(request, docs = loadContracts()) {
   }
 
   assertExplicitCutepowerRuntimeLock(request, docs);
+  const mode = request.execution_mode || "default";
+  if (mode === "explicit_cutepower") {
+    const session = assertSessionCapability(request);
+    if (session) {
+      assertPhaseTransition(request, session);
+      assertArtifactPreconditions(request, session);
+    }
+  }
 
   switch (request.request_type) {
     case "skill_invocation":
@@ -508,5 +675,6 @@ if (require.main === module) {
 
 module.exports = {
   evaluateRuntimeRequest,
-  loadContracts
+  loadContracts,
+  validateRunCompletion: validateCompletion
 };

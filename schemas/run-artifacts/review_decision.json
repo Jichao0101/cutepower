@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "schema_id": "cutepower.run-artifact/review_decision/v1",
+  "required": [
+    "schema",
+    "artifact_type",
+    "session_id",
+    "route_id",
+    "phase",
+    "generated_at",
+    "payload"
+  ],
+  "properties": {
+    "schema": { "const": "cutepower.run-artifact/review_decision/v1" },
+    "artifact_type": { "const": "review_decision" },
+    "session_id": { "type": "string" },
+    "route_id": { "type": "string" },
+    "phase": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "payload": { "type": "object" }
+  },
+  "payload_required": [
+    "review_type",
+    "outcome",
+    "reviewer_role_id",
+    "reviewer_instance_id",
+    "evidence_keys"
+  ],
+  "payload_properties": {
+    "review_type": { "type": "string" },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "rework_required",
+        "blocked",
+        "evidence_gap"
+      ]
+    },
+    "reviewer_role_id": { "type": "string" },
+    "reviewer_instance_id": { "type": "string" },
+    "evidence_keys": { "type": "array" }
+  }
+}

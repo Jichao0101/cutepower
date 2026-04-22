@@ -36,6 +36,9 @@ function main() {
   });
   assert(bugFix.intake.status === "accepted", "bug-fix request should be accepted by intake");
   assert(bugFix.execution_mode.mode === "explicit_cutepower", "explicit cutepower request should enable explicit runtime mode");
+  assert(bugFix.session_id, "bug-fix request should allocate a session_id");
+  assert(bugFix.artifact_plan.artifact_dir.endsWith(bugFix.session_id), "artifact plan should bind to the session directory");
+  assert(bugFix.phase === "gate_ready", "accepted bug-fix request should reach gate_ready");
   assert(bugFix.route_resolution.route_id === "bug_fix_default", "bug-fix request should resolve the bug-fix route");
   assert(bugFix.skill_handoff.next_skill === "cute-scope-plan", "bug-fix request should hand off to cute-scope-plan first");
   assert(!bugFix.execution_policy.direct_execution_allowed, "accepted bug-fix should not allow direct fallback execution");
@@ -88,6 +91,7 @@ function main() {
     }
   });
   assert(blockedBoard.runtime_gate.status === "blocked", "board task without board authorization should block");
+  assert(blockedBoard.phase === "blocked", "blocked board task should surface blocked phase");
   assert(
     blockedBoard.blocking_gaps.some((gap) => gap.gap_id === "board_execute_authorization"),
     "board task should report board authorization gap"
@@ -103,6 +107,7 @@ function main() {
     lowConfidenceEngineering.runtime_gate.status === "clarification_required",
     "low-confidence engineering task should require clarification instead of declining"
   );
+  assert(lowConfidenceEngineering.phase === "clarification_required", "clarification-required intake should surface clarification phase");
   assert(
     !lowConfidenceEngineering.execution_policy.direct_execution_allowed,
     "low-confidence engineering task should not silently fallback to direct execution"
@@ -149,6 +154,7 @@ function main() {
     cwd
   });
   assert(explicitDecline.runtime_gate.status === "declined", "non-engineering request should decline cutepower intake");
+  assert(explicitDecline.phase === "declined", "declined intake should surface declined phase");
   assert(explicitDecline.execution_policy.direct_execution_allowed, "only explicit decline should allow direct fallback execution");
 
   for (const protectedSkill of bugFix.execution_policy.protected_execution_skills) {

@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 
+const { createRunSession, saveRunSession, writeArtifact } = require("./run-artifacts");
 const { buildTaskProfile } = require("./task-profile");
 const { loadContracts } = require("./runtime-gates");
 
@@ -208,6 +209,25 @@ function buildRuntimeGate(taskProfile, routeResolution, blockingGaps, engineerin
   };
 }
 
+function derivePhase(runtimeGate, routeResolution) {
+  if (runtimeGate.status === "declined") {
+    return "declined";
+  }
+  if (runtimeGate.status === "blocked") {
+    return "blocked";
+  }
+  if (runtimeGate.status === "clarification_required") {
+    return "clarification_required";
+  }
+  if (routeResolution.route_status === "resolved" && runtimeGate.status === "ready") {
+    return "gate_ready";
+  }
+  if (routeResolution.route_status === "resolved") {
+    return "route_resolved";
+  }
+  return "intake_accepted";
+}
+
 function buildExecutionPolicy(runtimeGate, docs) {
   const runtimeEntry = docs["task-normalization"].activation.runtime_entry || {};
   const protectedSkills = docs["task-normalization"].activation.runtime_entry.protected_execution_skills || [];
@@ -231,6 +251,10 @@ function buildExecutionPolicy(runtimeGate, docs) {
   };
 }
 
+function getWritebackLevel(route) {
+  return route?.writeback_level || null;
+}
+
 function buildIntakePackage(request, docs = loadContracts()) {
   if (!request || typeof request !== "object") {
     throw intakeError("task intake request must be an object");
@@ -249,8 +273,45 @@ function buildIntakePackage(request, docs = loadContracts()) {
   const blockingGaps = buildBlockingGaps(taskProfile, route, request, docs, runtimeDiscovery);
   const runtimeGate = buildRuntimeGate(taskProfile, routeResolution, blockingGaps, engineeringSignal);
   const executionPolicy = buildExecutionPolicy(runtimeGate, docs);
+  const phase = derivePhase(runtimeGate, routeResolution);
+  const session = createRunSession({
+    workspace_root: request.cwd || pluginRoot,
+    task_goal: request.task_goal,
+    explicit_mode: explicitCutepower.requested,
+    execution_mode: explicitCutepower.mode,
+    route_id: route?.route_id || taskProfile.route_id || "unresolved",
+    required_gates: route?.required_gates || [],
+    writeback_level: getWritebackLevel(route),
+    runtime_gate_status: runtimeGate.status,
+    current_phase: phase
+  });
+
+  writeArtifact(session, "task_profile", taskProfile, {
+    route_id: session.route_id,
+    phase: "intake_accepted"
+  });
+  writeArtifact(session, "route_resolution", routeResolution, {
+    route_id: session.route_id,
+    phase: routeResolution.route_status === "resolved" ? "route_resolved" : "intake_accepted"
+  });
+  writeArtifact(session, "runtime_gate", runtimeGate, {
+    route_id: session.route_id,
+    phase
+  });
+  writeArtifact(session, "context_requirements", contextRequirements, {
+    route_id: session.route_id,
+    phase: "intake_accepted"
+  });
+  writeArtifact(session, "blocking_gaps", blockingGaps, {
+    route_id: session.route_id,
+    phase
+  });
+  saveRunSession(session);
 
   return {
+    session_id: session.session_id,
+    phase,
+    artifact_plan: session.artifact_plan,
     entry_skill: docs["task-normalization"].activation.entry_skill,
     task_profile: taskProfile,
     intake: {

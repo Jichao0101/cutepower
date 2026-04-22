@@ -4,8 +4,14 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+const {
+  deriveCurrentPhase,
+  issueSessionCapability,
+  loadRunSession,
+  validateCompletion
+} = require("./run-artifacts");
 const { buildSessionContextEnvelope } = require("./host-runtime");
-const { evaluateRuntimeRequest } = require("./runtime-gates");
+const { evaluateRuntimeRequest, validateRunCompletion } = require("./runtime-gates");
 
 const pluginRoot = path.resolve(__dirname, "..");
 
@@ -328,6 +334,60 @@ function mergeGuard(request, state) {
   };
 }
 
+function inferGateStateForRequest(request, session) {
+  if (request.request_type === "review_decision") {
+    return "review";
+  }
+  if (request.request_type === "writeback") {
+    return "writeback";
+  }
+
+  const actions = request.requested_actions || [];
+  if (actions.includes("repo_write") || actions.includes("verification_write") || actions.includes("board_execute")) {
+    return "implementation";
+  }
+
+  if (deriveCurrentPhase(session) === "review_active") {
+    return "review";
+  }
+
+  return "analysis";
+}
+
+function attachDerivedCapability(request, state) {
+  const actions = Array.isArray(request.requested_actions)
+    ? request.requested_actions
+    : request.request_type === "writeback"
+      ? [request.writeback_level]
+      : [];
+
+  const runtimeDiscoveryOnly = actions.length > 0 && actions.every((action) => action === "runtime_discovery_read");
+  if (runtimeDiscoveryOnly) {
+    return request;
+  }
+
+  const artifactDir = request.artifact_dir || state.action_guard?.artifact_dir;
+  if (!artifactDir) {
+    throw hookError("explicit mode request is missing artifact_dir");
+  }
+
+  const session = loadRunSession(artifactDir);
+  const phase = deriveCurrentPhase(session);
+  const capability = request.session_capability || issueSessionCapability(session, {
+    phase,
+    allowed_actions: actions,
+    route_id: request.route_id || session.route_id
+  });
+
+  return {
+    ...request,
+    route_id: request.route_id || session.route_id,
+    artifact_dir: artifactDir,
+    state: request.state || inferGateStateForRequest(request, session),
+    session_capability: capability
+  };
+}
+
 function handleUserPromptSubmit(payload) {
   const prompt = extractPrompt(payload);
   if (!prompt) {
@@ -347,6 +407,7 @@ function handleUserPromptSubmit(payload) {
     intake_package: envelope.intake_package,
     action_guard: envelope.host_runtime.action_guard,
     session_context: envelope.host_runtime.session_context,
+    session_capability: envelope.host_runtime.session_capability,
     denied_events: [],
     unmapped_events: []
   };
@@ -371,16 +432,19 @@ function handlePreToolUse(payload) {
 
   const inferred = inferActionFromHookPayload(payload);
   if (!inferred) {
-    state.unmapped_events.push({
+    const deniedEvent = {
       at: new Date().toISOString(),
       tool_name: extractToolName(payload),
-      command: extractCommand(payload)
-    });
+      command: extractCommand(payload),
+      error: "unmapped tool event denied in explicit cutepower mode"
+    };
+    state.unmapped_events.push(deniedEvent);
+    state.denied_events.push(deniedEvent);
     writeState(state);
-    return "[cutepower hook] explicit mode active, but this tool event was not mapped to a cutepower gate request.";
+    throw hookError("unmapped tool event denied in explicit cutepower mode");
   }
 
-  const request = mergeGuard(inferred.request, state);
+  const request = attachDerivedCapability(mergeGuard(inferred.request, state), state);
 
   try {
     evaluateRuntimeRequest(request);
@@ -405,12 +469,17 @@ function handleStop() {
     return "";
   }
 
+  const completion = validateRunCompletion(state.action_guard?.artifact_dir);
+  if (!completion.ok) {
+    throw hookError(`explicit cutepower run is not closed: ${completion.missing.join(", ")}`, completion);
+  }
+
   const denied = state.denied_events || [];
   const unmapped = state.unmapped_events || [];
   return [
     "[cutepower hook] stop summary",
     `[cutepower hook] explicit mode: ${state.explicit_mode}`,
-    `[cutepower hook] runtime gate: ${state.action_guard?.runtime_gate_status || "unknown"}`,
+    `[cutepower hook] phase: ${completion.current_phase}`,
     `[cutepower hook] denied events: ${denied.length}`,
     `[cutepower hook] unmapped tool events: ${unmapped.length}`
   ].join("\n");

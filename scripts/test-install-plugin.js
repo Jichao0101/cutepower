@@ -80,9 +80,9 @@ function main() {
   );
 
   run(["--mode", "personal", "--home", fakeHome]);
-  const personalPlugin = path.join(fakeHome, "plugins", "cutepower", ".codex-plugin", "plugin.json");
-  const personalAgent = path.join(fakeHome, "plugins", "cutepower", "agents", "openai.yaml");
-  const personalHostRuntime = path.join(fakeHome, "plugins", "cutepower", "scripts", "host-runtime.js");
+  const personalPlugin = path.join(fakeHome, ".codex", "plugins", "cutepower", ".codex-plugin", "plugin.json");
+  const personalAgent = path.join(fakeHome, ".codex", "plugins", "cutepower", "agents", "openai.yaml");
+  const personalHostRuntime = path.join(fakeHome, ".codex", "plugins", "cutepower", "scripts", "host-runtime.js");
   const personalCodexConfig = path.join(fakeHome, ".codex", "config.toml");
   const personalCodexHooks = path.join(fakeHome, ".codex", "hooks.json");
   const personalMarketplace = path.join(fakeHome, ".agents", "plugins", "marketplace.json");
@@ -109,7 +109,7 @@ function main() {
     "personal install should preserve other feature flags"
   );
   assert(
-    readJson(personalCodexHooks).hooks.UserPromptSubmit[0].hooks[0].command.includes(path.join(fakeHome, "plugins", "cutepower", "scripts", "codex-hooks.js")),
+    readJson(personalCodexHooks).hooks.UserPromptSubmit[0].hooks[0].command.includes(path.join(fakeHome, ".codex", "plugins", "cutepower", "scripts", "codex-hooks.js")),
     "personal hooks do not point at installed cutepower hook runner"
   );
   assert(
@@ -117,7 +117,7 @@ function main() {
     "personal install should preserve unrelated existing hooks"
   );
   assert(
-    readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").source.path === "./plugins/cutepower",
+    readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").source.path === "./.codex/plugins/cutepower",
     "personal marketplace path is incorrect"
   );
   assert(
@@ -168,7 +168,7 @@ function main() {
   run(["--mode", "personal", "--home", fakeHome, "--force"]);
   const personalHooksAfterReinstall = readJson(personalCodexHooks);
   const personalCutepowerUserHooks = personalHooksAfterReinstall.hooks.UserPromptSubmit.filter((entry) =>
-    JSON.stringify(entry.hooks || []).includes(path.join(fakeHome, "plugins", "cutepower", "scripts", "codex-hooks.js"))
+    JSON.stringify(entry.hooks || []).includes(path.join(fakeHome, ".codex", "plugins", "cutepower", "scripts", "codex-hooks.js"))
   );
   assert(personalCutepowerUserHooks.length === 1, "reinstall should not duplicate cutepower UserPromptSubmit hooks");
 

@@ -31,11 +31,11 @@ node scripts/install-plugin.js --mode personal
 This bootstraps:
 
 ```text
-~/plugins/cutepower/
+~/.codex/plugins/cutepower/
 ~/.agents/plugins/marketplace.json
 ```
 
-The marketplace entry points to `./plugins/cutepower`, so discovery stays under the user home instead of the development repository path.
+The marketplace entry points to `./.codex/plugins/cutepower`, so discovery stays under the user home instead of the development repository path.
 After this, open `/plugins`, search `cutepower`, and choose `Install Plugin`.
 
 ## Repo-scoped install
@@ -82,10 +82,10 @@ node scripts/test-task-profile.js
 node scripts/test-task-intake.js
 ```
 
-For a personal install, also verify:
+For a personal install, verify:
 
 ```bash
-test -f ~/plugins/cutepower/.codex-plugin/plugin.json
+test -f ~/.codex/plugins/cutepower/.codex-plugin/plugin.json
 test -f ~/.agents/plugins/marketplace.json
 ```
 
@@ -114,7 +114,7 @@ node scripts/install-plugin.js --mode repo --target-root <repo-root> --force
 
 ## Uninstalling
 
-- personal install: remove `~/plugins/cutepower` and delete or edit the cutepower entry in `~/.agents/plugins/marketplace.json`
+- personal install: remove `~/.codex/plugins/cutepower` and delete or edit the cutepower entry in `~/.agents/plugins/marketplace.json`
 - repo install: remove `<repo-root>/plugins/cutepower` and delete or edit the cutepower entry in `<repo-root>/.agents/plugins/marketplace.json`
 
 ## Migrating from direct-link installs

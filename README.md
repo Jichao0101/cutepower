@@ -25,6 +25,7 @@ Installation entry:
 - the git repository is the development source; the runtime should consume an installed copy.
 - preferred installation is `node scripts/install-plugin.js --mode personal`
 - repo-scoped installation is `node scripts/install-plugin.js --mode repo --target-root <repo-root>`
+- personal installs stage the plugin under `~/.codex/plugins/`; repo installs stage under `<repo-root>/plugins/`
 - Do not treat a host knowledge repository as the code root for this project.
 
 Current scope:

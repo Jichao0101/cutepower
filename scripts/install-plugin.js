@@ -79,13 +79,13 @@ function resolveLayout(options) {
     const homeRoot = path.resolve(options.home);
     return {
       installRoot: homeRoot,
-      installDir: path.join(homeRoot, "plugins", pluginName),
+      installDir: path.join(homeRoot, ".codex", "plugins", pluginName),
       marketplacePath: path.join(homeRoot, ".agents", "plugins", "marketplace.json"),
       codexConfigPath: path.join(homeRoot, ".codex", "config.toml"),
       codexHooksPath: path.join(homeRoot, ".codex", "hooks.json"),
       marketplaceName: "personal-local",
       marketplaceDisplayName: "Personal Local",
-      sourcePath: `./plugins/${pluginName}`
+      sourcePath: `./.codex/plugins/${pluginName}`
     };
   }
 

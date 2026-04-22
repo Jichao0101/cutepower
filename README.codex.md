@@ -15,6 +15,7 @@ Important distinction:
 
 After the script finishes, open `/plugins`, search `cutepower`, and choose `Install Plugin`. Re-run the script only when you want to update or replace that staged plugin source.
 The install script also merges the cutepower Codex hook entries into the target `~/.codex/` or repo `.codex/` config, instead of changing the development repository's own hook files.
+For personal installs, the staged plugin copy now follows the official Codex docs pattern under `~/.codex/plugins/`; repo installs continue to stage under `<repo-root>/plugins/`.
 
 Current repository note:
 

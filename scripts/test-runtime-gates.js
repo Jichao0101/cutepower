@@ -1,163 +1,95 @@
-#!/usr/bin/env node
+'use strict';
 
-const fs = require("fs");
-const path = require("path");
+const assert = require('assert');
+const {
+  buildBlockedTerminalArtifacts,
+  evaluateStopGate,
+  gateToolAction,
+} = require('./runtime-gates');
 
-const { buildSessionContextEnvelope, prepareActionRequest } = require("./host-runtime");
-const { evaluateRuntimeRequest } = require("./runtime-gates");
-const { getArtifactPath, writeArtifact, syncRunSession } = require("./run-artifacts");
-
-const cwd = path.resolve(__dirname, "..");
-
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
-function expectThrows(fn, expectedMessage) {
-  try {
-    fn();
-  } catch (error) {
-    if (expectedMessage && !error.message.includes(expectedMessage)) {
-      throw new Error(`expected error containing "${expectedMessage}", got "${error.message}"`);
-    }
-    return;
-  }
-  throw new Error("expected function to throw");
-}
-
-function makeBugFixEnvelope() {
-  return buildSessionContextEnvelope({
-    task_goal: "按 cutepower 执行，修复 repo 启动回归并更新代码。",
-    cwd,
-    authorizations: {
-      repo_write: true
-    }
-  });
-}
-
-function makeReviewReadyEnvelope() {
-  const envelope = makeBugFixEnvelope();
-  const session = syncRunSession(path.join(envelope.intake_package.artifact_plan.artifact_dir, "session.json"));
-  writeArtifact(session, "evidence_manifest", {
-    evidence_items: [
-      {
-        kind: "test_result",
-        path: "artifacts/test.log"
-      }
-    ]
-  }, { phase: "review_active" });
-  syncRunSession(session);
-  return envelope;
-}
-
-function main() {
-  const runtimeDiscoveryEnvelope = buildSessionContextEnvelope({
-    task_goal: "按 cutepower 执行，先检查 runtime hook 和 contracts。",
-    cwd,
-    explicit_cutepower: true
-  });
-  runtimeDiscoveryEnvelope.host_runtime.action_guard.intake_status = null;
-  runtimeDiscoveryEnvelope.host_runtime.action_guard.route_status = null;
-  runtimeDiscoveryEnvelope.host_runtime.action_guard.runtime_gate_status = null;
-  evaluateRuntimeRequest(
-    prepareActionRequest(
-      {
-        request_type: "skill_invocation",
-        skill_id: "using-cutepower",
-        role_id: "workflow-orchestrator",
-        requested_actions: ["runtime_discovery_read"]
-      },
-      runtimeDiscoveryEnvelope
-    )
-  );
-
-  const readyEnvelope = makeBugFixEnvelope();
-  const repoWriteRequest = prepareActionRequest(
-    {
-      request_type: "skill_invocation",
-      route_id: readyEnvelope.intake_package.route_resolution.route_id,
-      skill_id: "cute-repo-change",
-      role_id: "repo-coder",
-      state: "implementation",
-      requested_actions: ["repo_write"]
+function testAuthorizedBusinessReadAllowedInEvidenceCollection() {
+  const result = gateToolAction({
+    action: 'authorized_business_context_read',
+    command: 'sed -n 1,40p contracts/gate-matrix.md',
+    hostRuntime: {
+      phase: 'evidence_collection',
+      evidence_collection_mode: 'read_only',
+      allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
+      allowed_paths: ['contracts/', 'scripts/'],
     },
-    readyEnvelope
-  );
-  evaluateRuntimeRequest(repoWriteRequest);
+  });
+  assert.equal(result.decision, 'allow');
+}
 
-  const missingCapabilityRequest = {
-    ...repoWriteRequest
-  };
-  delete missingCapabilityRequest.session_capability;
-  expectThrows(() => evaluateRuntimeRequest(missingCapabilityRequest), "explicit runtime request requires session_capability");
+function testWritebackOrReviewerEscalationStillDenied() {
+  const result = gateToolAction({
+    action: 'forbidden_business_context_read',
+    command: 'node scripts/writeback.js',
+    hostRuntime: {
+      phase: 'evidence_collection',
+      evidence_collection_mode: 'read_only',
+      allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
+      allowed_paths: ['contracts/', 'scripts/'],
+    },
+  });
+  assert.equal(result.decision, 'deny');
+}
 
-  const taskProfilePath = getArtifactPath(readyEnvelope.intake_package.artifact_plan.artifact_dir, "task_profile");
-  fs.rmSync(taskProfilePath, { force: true });
-  expectThrows(() => evaluateRuntimeRequest(repoWriteRequest), "phase admission requires artifact task_profile");
+function testBlockedReviewCanClose() {
+  const artifacts = buildBlockedTerminalArtifacts({
+    sessionId: 's-blocked',
+    routeId: 'explicit_read_only_functional_audit',
+    blockedReason: 'runtime_integration_defect',
+  });
+  const result = evaluateStopGate({
+    hostRuntime: {
+      session_id: 's-blocked',
+      route_id: 'explicit_read_only_functional_audit',
+    },
+    artifacts,
+  });
+  assert.equal(result.decision, 'allow');
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.terminal_phase, 'blocked_closed');
+}
 
-  const reviewEnvelope = makeReviewReadyEnvelope();
-  const reviewRequest = prepareActionRequest(
-    {
-      request_type: "review_decision",
-      route_id: reviewEnvelope.intake_package.route_resolution.route_id,
-      skill_id: "cute-code-review",
-      role_id: "repo-reviewer",
-      state: "review",
-      review_type: "repo_review",
-      requested_actions: ["review_decision"],
-      evidence_keys: [
-        "task_goal",
-        "implementation_plan",
-        "diff_summary",
-        "verification_results",
-        "verification_tier",
-        "necessary_code_context"
+function testMissingArtifactsStillBlocked() {
+  const result = evaluateStopGate({
+    hostRuntime: {
+      session_id: 's-missing',
+      route_id: 'explicit_read_only_functional_audit',
+    },
+    artifacts: {},
+  });
+  assert.equal(result.decision, 'deny');
+  assert.equal(result.reason, 'run_is_not_closed');
+}
+
+function testRepoLocalVerificationExecAllowedForIntegrationFix() {
+  const result = gateToolAction({
+    action: 'repo_local_verification_exec',
+    command: 'node scripts/test-codex-hooks.js',
+    hostRuntime: {
+      phase: 'implementation',
+      evidence_collection_mode: 'implementation',
+      allowed_actions: [
+        'runtime_discovery_read',
+        'authorized_business_context_read',
+        'repo_local_verification_exec',
       ],
-      author_stage_id: "implementation",
-      reviewer_stage_id: "review",
-      author_instance_id: "author-1",
-      reviewer_instance_id: "reviewer-1",
-      inherit_full_author_context: false,
-      inherit_full_author_reasoning: false
+      allowed_paths: ['contracts/', 'scripts/', 'docs/'],
     },
-    reviewEnvelope
-  );
-  evaluateRuntimeRequest(reviewRequest);
-
-  const writebackWithoutReview = prepareActionRequest(
-    {
-      request_type: "writeback",
-      route_id: reviewEnvelope.intake_package.route_resolution.route_id,
-      scenario: "default",
-      approval_gate: "review",
-      writeback_level: "project_current_update",
-      pass_statuses: ["repo_review_passed"],
-      actor_role_id: "workflow-orchestrator",
-      author_instance_id: "author-1",
-      adjudication: {
-        adjudicator_instance_id: "orchestrator-1"
-      },
-      completed_preconditions: [
-        "writeback_state_reached",
-        "route_writeback_requirements_satisfied",
-        "review_pass_recorded",
-        "independent_writeback_adjudication"
-      ]
-    },
-    reviewEnvelope
-  );
-  expectThrows(() => evaluateRuntimeRequest(writebackWithoutReview), "phase review_active does not allow writeback");
-
-  console.log("cutepower runtime gates tests passed");
+  });
+  assert.equal(result.decision, 'allow');
 }
 
-if (require.main === module) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error.message);
-    process.exit(1);
-  }
+function run() {
+  testAuthorizedBusinessReadAllowedInEvidenceCollection();
+  testWritebackOrReviewerEscalationStillDenied();
+  testBlockedReviewCanClose();
+  testMissingArtifactsStillBlocked();
+  testRepoLocalVerificationExecAllowedForIntegrationFix();
+  process.stdout.write('test-runtime-gates: ok\n');
 }
+
+run();

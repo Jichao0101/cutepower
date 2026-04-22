@@ -1,0 +1,52 @@
+{
+  "schema": "cutepower.run-session/v1",
+  "session_id": "run_20260422103716_8a1eb938",
+  "workspace_root": "/mnt/d/cutepower",
+  "artifact_dir": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938",
+  "task_goal": "以功能修复为主，可以不是最小可验证修复",
+  "execution_mode": "default",
+  "explicit_mode": false,
+  "route_id": "bug_fix_default",
+  "required_gates": [
+    "analysis",
+    "implementation",
+    "review",
+    "writeback"
+  ],
+  "writeback_level": "project_current_update",
+  "runtime_gate_status": "blocked",
+  "created_at": "2026-04-22T10:37:16.667Z",
+  "updated_at": "2026-04-22T10:37:16.826Z",
+  "current_phase": "blocked",
+  "capability_secret": "8206361db4beb9f68d3f31aa41263b27",
+  "last_capability": null,
+  "artifact_plan": {
+    "session_id": "run_20260422103716_8a1eb938",
+    "artifact_dir": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938",
+    "preflight_artifacts": [
+      "task_profile",
+      "route_resolution",
+      "runtime_gate",
+      "context_requirements",
+      "blocking_gaps"
+    ],
+    "terminal_artifacts": [
+      "task_profile",
+      "route_resolution",
+      "runtime_gate",
+      "context_requirements",
+      "blocking_gaps"
+    ],
+    "files": {
+      "task_profile": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938/task_profile.json",
+      "route_resolution": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938/route_resolution.json",
+      "runtime_gate": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938/runtime_gate.json",
+      "context_requirements": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938/context_requirements.json",
+      "blocking_gaps": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938/blocking_gaps.json",
+      "evidence_manifest": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938/evidence_manifest.json",
+      "review_decision": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938/review_decision.json",
+      "writeback_receipt": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938/writeback_receipt.json",
+      "writeback_declined": "/mnt/d/cutepower/.cutepower/run/run_20260422103716_8a1eb938/writeback_declined.json"
+    }
+  }
+}

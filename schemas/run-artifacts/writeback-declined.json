@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schemas/run-artifacts/writeback-declined.json",
+  "type": "object",
+  "required": ["session_id", "route_id", "status", "reason"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "route_id": { "type": "string" },
+    "status": { "const": "declined" },
+    "reason": { "type": "string" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,20 @@
+{
+  "schema": "cutepower.run-artifact/blocking_gaps/v1",
+  "artifact_type": "blocking_gaps",
+  "session_id": "run_20260422103147_289fcecf",
+  "route_id": "unresolved",
+  "phase": "clarification_required",
+  "generated_at": "2026-04-22T10:31:47.346Z",
+  "payload": [
+    {
+      "gap_id": "knowledge_base_root",
+      "gap_type": "context_missing",
+      "message": "missing required context: knowledge_base_root"
+    },
+    {
+      "gap_id": "knowledge_read_authorization",
+      "gap_type": "authorization_missing",
+      "message": "knowledge read authorization is required for knowledge-base context"
+    }
+  ]
+}

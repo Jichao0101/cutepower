@@ -1,362 +1,213 @@
-#!/usr/bin/env node
+'use strict';
 
-const fs = require("fs");
-const path = require("path");
-
-const { createRunSession, saveRunSession, writeArtifact } = require("./run-artifacts");
-const { buildTaskProfile } = require("./task-profile");
-const { loadContracts } = require("./runtime-gates");
-
-const pluginRoot = path.resolve(__dirname, "..");
-
-function intakeError(message, context = {}) {
-  const error = new Error(message);
-  error.context = context;
-  return error;
-}
-
-function readRequestFromCli(args) {
-  if (args.length === 0 || args[0] === "--stdin") {
-    return JSON.parse(fs.readFileSync(0, "utf8"));
-  }
-  return JSON.parse(fs.readFileSync(path.resolve(args[0]), "utf8"));
-}
-
-function normalizeText(value) {
-  return String(value || "").toLowerCase();
-}
-
-function getRouteById(routeId, docs) {
-  return docs["routing-table"].routes.find((route) => route.route_id === routeId) || null;
-}
-
-function detectRuntimeDiscovery(taskGoal, docs) {
-  const config = docs["task-normalization"].activation.runtime_discovery || {};
-  const text = normalizeText(taskGoal);
-  const matchedKeywords = (config.keywords || []).filter((keyword) => text.includes(String(keyword).toLowerCase()));
+function normalizeTaskProfile(input = {}) {
+  const prompt = String(input.prompt || input.user_prompt || '').toLowerCase();
+  const explicitMode = input.explicit_mode !== false;
+  const requestedAudit = /functional audit|read-only audit|readonly audit|read only audit/.test(prompt)
+    || input.audit_mode === 'functional_read_only';
+  const readOnlyRequested = /read-only|readonly|read only/.test(prompt)
+    || input.evidence_collection_mode === 'read_only';
+  const requestedIntegrationFix = /hook integration fix|codex hook integration fix|integration defect|runtime defect|修复|改造/.test(prompt)
+    || input.task_type === 'hook_integration_fix';
 
   return {
-    requested: matchedKeywords.length > 0,
-    matched_keywords: matchedKeywords,
-    allowed_roots: config.allowed_roots || []
+    primary_type: requestedAudit
+      ? 'functional_audit'
+      : requestedIntegrationFix
+        ? 'hook_integration_fix'
+        : 'general_task',
+    task_modifiers: requestedAudit
+      ? ['read_only', 'strict']
+      : requestedIntegrationFix
+        ? ['implementation', 'verification']
+        : [],
+    explicit_mode: explicitMode,
+    requested_capability: requestedAudit && readOnlyRequested
+      ? 'functional_audit_read_only'
+      : requestedIntegrationFix
+        ? 'hook_integration_fix'
+        : 'unknown',
+    requested_outputs: ['task_profile', 'route_resolution', 'runtime_gate'],
   };
 }
 
-function detectEngineeringSignal(taskGoal, docs) {
-  const activation = docs["task-normalization"].activation || {};
-  const text = normalizeText(taskGoal);
-  const matchedTerms = (activation.engineering_signal_terms || []).filter((term) => text.includes(String(term).toLowerCase()));
+function extractAuthorization(input = {}) {
+  const authorization = input.authorization || {};
+  const supplemental = input.supplemental_authorization || {};
+  const mergedPaths = [
+    ...(authorization.allowed_paths || []),
+    ...(supplemental.allowed_paths || []),
+  ];
 
   return {
-    requested: matchedTerms.length > 0,
-    matched_terms: matchedTerms,
-    prefer_intake: activation.prefer_intake_for_engineering_signals === true
+    user_explicitly_authorized: Boolean(
+      authorization.user_explicitly_authorized
+      || supplemental.user_explicitly_authorized
+      || input.user_explicitly_authorized
+    ),
+    project_paths_authorized: Boolean(
+      authorization.project_paths_authorized
+      || supplemental.project_paths_authorized
+      || input.project_paths_authorized
+    ),
+    container_access_authorized: Boolean(
+      authorization.container_access_authorized
+      || supplemental.container_access_authorized
+      || input.container_access_authorized
+    ),
+    evidence_collection_mode: supplemental.evidence_collection_mode
+      || authorization.evidence_collection_mode
+      || input.evidence_collection_mode
+      || null,
+    allowed_paths: Array.from(new Set(mergedPaths)),
   };
 }
 
-function detectExplicitCutepower(request, docs) {
-  const config = docs["task-normalization"].activation.runtime_entry || {};
-  const text = normalizeText(request.task_goal);
-  const matchedKeywords = (config.explicit_mode_keywords || []).filter((keyword) =>
-    text.includes(String(keyword).toLowerCase())
-  );
+function resolveRoute(taskProfile, authorization) {
+  if (
+    taskProfile.explicit_mode
+    && taskProfile.requested_capability === 'hook_integration_fix'
+  ) {
+    return {
+      route_id: 'explicit_hook_integration_fix',
+      phase: 'implementation',
+      allowed_actions: authorization.user_explicitly_authorized
+        ? [
+            'runtime_discovery_read',
+            'authorized_business_context_read',
+            'repo_local_verification_exec',
+          ]
+        : ['runtime_discovery_read'],
+      required_artifacts: ['task_profile', 'route_resolution', 'runtime_gate'],
+    };
+  }
+
+  if (
+    taskProfile.explicit_mode
+    && taskProfile.requested_capability === 'functional_audit_read_only'
+  ) {
+    return {
+      route_id: 'explicit_read_only_functional_audit',
+      phase: 'evidence_collection',
+      allowed_actions: authorization.user_explicitly_authorized
+        ? [
+            'runtime_discovery_read',
+            'authorized_business_context_read',
+          ]
+        : ['runtime_discovery_read'],
+      required_artifacts: ['task_profile', 'route_resolution', 'runtime_gate'],
+    };
+  }
 
   return {
-    requested: request.explicit_cutepower === true || matchedKeywords.length > 0,
-    matched_keywords: matchedKeywords,
-    mode: request.explicit_cutepower === true || matchedKeywords.length > 0 ? "explicit_cutepower" : "default"
+    route_id: 'declined_general_execution',
+    phase: 'intake',
+    allowed_actions: ['runtime_discovery_read'],
+    required_artifacts: ['task_profile'],
   };
 }
 
-function summarizeContextRequirements(taskProfile, runtimeDiscovery) {
-  const requirements = [];
+function buildRuntimeGate(input = {}) {
+  const task_profile = normalizeTaskProfile(input);
+  const authorization = extractAuthorization(input);
+  const route_resolution = resolveRoute(task_profile, authorization);
 
-  for (const fieldId of Object.keys(taskProfile.inferred_context || {}).sort()) {
-    requirements.push({
-      field_id: fieldId,
-      status: "resolved",
-      value: taskProfile.inferred_context[fieldId]
-    });
+  const allowedPaths = authorization.allowed_paths.length > 0
+    ? authorization.allowed_paths
+    : ['contracts/', 'scripts/', 'docs/', 'README.md', 'AGENTS.md'];
+
+  if (route_resolution.route_id === 'declined_general_execution') {
+    return {
+      status: 'declined',
+      task_profile,
+      route_resolution,
+      blocking_reasons: ['unsupported_task_profile_for_cutepower_route'],
+      phase: 'intake',
+      allowed_actions: route_resolution.allowed_actions,
+      allowed_paths: [],
+      evidence_collection_mode: null,
+      capability: null,
+      required_preflight_outputs: route_resolution.required_artifacts,
+    };
   }
 
-  for (const fieldId of taskProfile.missing_context || []) {
-    requirements.push({
-      field_id: fieldId,
-      status: "missing"
-    });
-  }
-
-  if (runtimeDiscovery.requested) {
-    requirements.push({
-      field_id: "runtime_discovery",
-      status: "resolved",
-      value: runtimeDiscovery.allowed_roots
-    });
-  }
-
-  return requirements;
-}
-
-function buildBlockingGaps(taskProfile, route, request, docs, runtimeDiscovery) {
-  const gaps = [];
-  const authorizations = request.authorizations || {};
-  const missingContext = new Set(taskProfile.missing_context || []);
-
-  for (const fieldId of missingContext) {
-    gaps.push({
-      gap_id: fieldId,
-      gap_type: "context_missing",
-      message: `missing required context: ${fieldId}`
-    });
-  }
-
-  if (runtimeDiscovery.requested && authorizations.knowledge_read === false) {
-    // Runtime discovery is handled from runtime roots and must not be blocked as knowledge context.
-  }
-
-  const roleSet = new Set(route?.required_roles || []);
-  if (roleSet.has("repo-coder") && authorizations.repo_write !== true) {
-    gaps.push({
-      gap_id: "repo_write_authorization",
-      gap_type: "authorization_missing",
-      message: "repo write authorization is required before repo-change handoff"
-    });
-  }
-
-  if ((taskProfile.missing_context || []).includes("knowledge_base_root") || request.knowledge_base_root) {
-    if (authorizations.knowledge_read !== true) {
-      gaps.push({
-        gap_id: "knowledge_read_authorization",
-        gap_type: "authorization_missing",
-        message: "knowledge read authorization is required for knowledge-base context"
-      });
+  if (route_resolution.route_id === 'explicit_hook_integration_fix') {
+    if (!authorization.user_explicitly_authorized || !authorization.project_paths_authorized) {
+      return {
+        status: 'blocked',
+        task_profile,
+        route_resolution,
+        blocking_reasons: ['explicit_authorization_for_project_read_missing'],
+        phase: 'intake',
+        allowed_actions: ['runtime_discovery_read'],
+        allowed_paths: [],
+        evidence_collection_mode: null,
+        capability: 'hook_integration_fix',
+        required_preflight_outputs: route_resolution.required_artifacts,
+      };
     }
-  }
 
-  if ((taskProfile.task_modifiers || []).includes("board_execution_required") && authorizations.board_execute !== true) {
-    gaps.push({
-      gap_id: "board_execute_authorization",
-      gap_type: "authorization_missing",
-      message: "board execution authorization is required before board-run handoff"
-    });
-  }
-
-  return gaps;
-}
-
-function buildHandoff(taskProfile, route) {
-  if (!route) {
-    return null;
-  }
-
-  const nextSkill = (route.skill_chain || [])[0] || null;
-  return {
-    entry_skill: route.entry_skill,
-    next_skill: nextSkill,
-    route_id: route.route_id,
-    required_roles: route.required_roles || [],
-    required_gates: route.required_gates || [],
-    conditional_handoffs: route.conditional_handoffs || []
-  };
-}
-
-function buildRouteResolution(taskProfile, route, docs, engineeringSignal) {
-  const activation = docs["task-normalization"].activation;
-  const autostartPrimaryTypes = new Set(activation.autostart_primary_types || []);
-
-  return {
-    entry_skill: activation.entry_skill,
-    autostart_enabled: autostartPrimaryTypes.has(taskProfile.primary_type),
-    engineering_signal_detected: engineeringSignal.requested,
-    primary_type: taskProfile.primary_type,
-    primary_type_status: taskProfile.primary_type_status,
-    route_id: taskProfile.route_id,
-    route_status: taskProfile.route_status,
-    fallback_behavior: activation.fallback_behavior,
-    skill_chain: route?.skill_chain || []
-  };
-}
-
-function buildRuntimeGate(taskProfile, routeResolution, blockingGaps, engineeringSignal) {
-  if (!routeResolution.autostart_enabled && !(engineeringSignal.prefer_intake && engineeringSignal.requested)) {
     return {
-      status: "declined",
-      reason: "primary_type_not_autostarted",
-      fallback_allowed: true
+      status: 'ready',
+      task_profile,
+      route_resolution,
+      phase: route_resolution.phase,
+      allowed_actions: route_resolution.allowed_actions,
+      allowed_paths: allowedPaths,
+      evidence_collection_mode: 'implementation',
+      capability: 'hook_integration_fix',
+      authorization,
+      required_preflight_outputs: route_resolution.required_artifacts,
     };
   }
 
-  if (taskProfile.primary_type_status !== "resolved" || taskProfile.route_status !== "resolved") {
+  if (!authorization.user_explicitly_authorized || !authorization.project_paths_authorized) {
     return {
-      status: "clarification_required",
-      reason: routeResolution.autostart_enabled ? "route_resolution_incomplete" : "engineering_signal_requires_intake_resolution",
-      fallback_allowed: false
+      status: 'blocked',
+      task_profile,
+      route_resolution,
+      blocking_reasons: ['explicit_authorization_for_project_read_missing'],
+      phase: 'intake',
+      allowed_actions: ['runtime_discovery_read'],
+      allowed_paths: [],
+      evidence_collection_mode: null,
+      capability: 'functional_audit_read_only',
+      required_preflight_outputs: route_resolution.required_artifacts,
     };
   }
 
-  if (blockingGaps.length > 0) {
+  if (authorization.evidence_collection_mode !== 'read_only') {
     return {
-      status: "blocked",
-      reason: "blocking_gaps",
-      fallback_allowed: false
+      status: 'blocked',
+      task_profile,
+      route_resolution,
+      blocking_reasons: ['read_only_evidence_collection_mode_required'],
+      phase: 'intake',
+      allowed_actions: ['runtime_discovery_read'],
+      allowed_paths: [],
+      evidence_collection_mode: null,
+      capability: 'functional_audit_read_only',
+      required_preflight_outputs: route_resolution.required_artifacts,
     };
   }
 
   return {
-    status: "ready",
-    reason: "cutepower_takeover",
-    fallback_allowed: false
+    status: 'ready',
+    task_profile,
+    route_resolution,
+    phase: route_resolution.phase,
+    allowed_actions: route_resolution.allowed_actions,
+    allowed_paths: allowedPaths,
+    evidence_collection_mode: 'read_only',
+    capability: 'functional_audit_read_only',
+    authorization,
+    required_preflight_outputs: route_resolution.required_artifacts,
   };
-}
-
-function derivePhase(runtimeGate, routeResolution) {
-  if (runtimeGate.status === "declined") {
-    return "declined";
-  }
-  if (runtimeGate.status === "blocked") {
-    return "blocked";
-  }
-  if (runtimeGate.status === "clarification_required") {
-    return "clarification_required";
-  }
-  if (routeResolution.route_status === "resolved" && runtimeGate.status === "ready") {
-    return "gate_ready";
-  }
-  if (routeResolution.route_status === "resolved") {
-    return "route_resolved";
-  }
-  return "intake_accepted";
-}
-
-function buildExecutionPolicy(runtimeGate, docs) {
-  const runtimeEntry = docs["task-normalization"].activation.runtime_entry || {};
-  const protectedSkills = docs["task-normalization"].activation.runtime_entry.protected_execution_skills || [];
-  return {
-    direct_execution_allowed: runtimeGate.status === "declined",
-    direct_execution_reason: runtimeGate.status === "declined" ? "cutepower_declined" : "intake_required_before_execution",
-    protected_execution_skills: protectedSkills,
-    runtime_lock: {
-      mode: "explicit_cutepower",
-      pre_intake_allowed_actions: runtimeEntry.pre_intake_allowed_actions || [],
-      protected_actions_before_ready: runtimeEntry.protected_actions_before_ready || [],
-      release_conditions: [
-        "task_profile_resolved",
-        "route_resolution_resolved",
-        "runtime_gate_ready"
-      ]
-    },
-    requires_successful_task_profile: true,
-    requires_successful_route_resolution: true,
-    requires_intake_acceptance_for_handoff: true
-  };
-}
-
-function getWritebackLevel(route) {
-  return route?.writeback_level || null;
-}
-
-function buildIntakePackage(request, docs = loadContracts()) {
-  if (!request || typeof request !== "object") {
-    throw intakeError("task intake request must be an object");
-  }
-  if (!request.task_goal || typeof request.task_goal !== "string") {
-    throw intakeError("task intake request requires task_goal");
-  }
-
-  const taskProfile = buildTaskProfile(request, docs);
-  const route = getRouteById(taskProfile.route_id, docs);
-  const runtimeDiscovery = detectRuntimeDiscovery(request.task_goal, docs);
-  const engineeringSignal = detectEngineeringSignal(request.task_goal, docs);
-  const explicitCutepower = detectExplicitCutepower(request, docs);
-  const routeResolution = buildRouteResolution(taskProfile, route, docs, engineeringSignal);
-  const contextRequirements = summarizeContextRequirements(taskProfile, runtimeDiscovery);
-  const blockingGaps = buildBlockingGaps(taskProfile, route, request, docs, runtimeDiscovery);
-  const runtimeGate = buildRuntimeGate(taskProfile, routeResolution, blockingGaps, engineeringSignal);
-  const executionPolicy = buildExecutionPolicy(runtimeGate, docs);
-  const phase = derivePhase(runtimeGate, routeResolution);
-  const session = createRunSession({
-    workspace_root: request.cwd || pluginRoot,
-    task_goal: request.task_goal,
-    explicit_mode: explicitCutepower.requested,
-    execution_mode: explicitCutepower.mode,
-    route_id: route?.route_id || taskProfile.route_id || "unresolved",
-    required_gates: route?.required_gates || [],
-    writeback_level: getWritebackLevel(route),
-    runtime_gate_status: runtimeGate.status,
-    current_phase: phase
-  });
-
-  writeArtifact(session, "task_profile", taskProfile, {
-    route_id: session.route_id,
-    phase: "intake_accepted"
-  });
-  writeArtifact(session, "route_resolution", routeResolution, {
-    route_id: session.route_id,
-    phase: routeResolution.route_status === "resolved" ? "route_resolved" : "intake_accepted"
-  });
-  writeArtifact(session, "runtime_gate", runtimeGate, {
-    route_id: session.route_id,
-    phase
-  });
-  writeArtifact(session, "context_requirements", contextRequirements, {
-    route_id: session.route_id,
-    phase: "intake_accepted"
-  });
-  writeArtifact(session, "blocking_gaps", blockingGaps, {
-    route_id: session.route_id,
-    phase
-  });
-  saveRunSession(session);
-
-  return {
-    session_id: session.session_id,
-    phase,
-    artifact_plan: session.artifact_plan,
-    entry_skill: docs["task-normalization"].activation.entry_skill,
-    task_profile: taskProfile,
-    intake: {
-      status: runtimeGate.status === "ready" ? "accepted" : runtimeGate.status,
-      preflight_completed: true
-    },
-    route_resolution: routeResolution,
-    context_requirements: contextRequirements,
-    blocking_gaps: blockingGaps,
-    runtime_discovery: runtimeDiscovery,
-    engineering_signal: engineeringSignal,
-    execution_mode: explicitCutepower,
-    skill_handoff: runtimeGate.status === "ready" ? buildHandoff(taskProfile, route) : null,
-    runtime_gate: runtimeGate,
-    execution_policy: executionPolicy
-  };
-}
-
-function main() {
-  const request = readRequestFromCli(process.argv.slice(2));
-  const intakePackage = buildIntakePackage(request);
-  console.log(JSON.stringify(intakePackage, null, 2));
-}
-
-if (require.main === module) {
-  try {
-    main();
-  } catch (error) {
-    console.error(
-      JSON.stringify(
-        {
-          ok: false,
-          error: error.message,
-          context: error.context || {}
-        },
-        null,
-        2
-      )
-    );
-    process.exit(1);
-  }
 }
 
 module.exports = {
-  buildIntakePackage,
-  detectRuntimeDiscovery,
-  detectEngineeringSignal
+  buildRuntimeGate,
+  extractAuthorization,
+  normalizeTaskProfile,
+  resolveRoute,
 };

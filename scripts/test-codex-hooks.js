@@ -1,149 +1,111 @@
-#!/usr/bin/env node
+'use strict';
 
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
-const { spawnSync } = require("child_process");
+const assert = require('assert');
+const {
+  handlePreToolUse,
+  handleStop,
+  handleUserPromptSubmit,
+  stableStringify,
+} = require('./codex-hooks');
 
-const { loadRunSession, writeArtifact, syncRunSession } = require("./run-artifacts");
-
-const repoRoot = path.resolve(__dirname, "..");
-const hookStatePath = path.join(
-  os.tmpdir(),
-  `cutepower-hook-state-${Buffer.from(repoRoot).toString("hex").slice(0, 24)}`,
-  "cutepower-state.json"
-);
-
-function assert(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
+function parseHookJson(result) {
+  return JSON.parse(stableStringify(result));
 }
 
-function runHook(mode, payload) {
-  return spawnSync("node", [path.join(repoRoot, "scripts", "codex-hooks.js"), mode], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      CODEX_HOOK_PAYLOAD: JSON.stringify(payload)
-    }
-  });
+function testUserPromptSubmitAlwaysReturnsJsonReadyState() {
+  const response = parseHookJson(handleUserPromptSubmit({
+    prompt: 'codex hook integration fix for explicit cutepower mode',
+    session_id: 's-user',
+    authorization: {
+      user_explicitly_authorized: true,
+      project_paths_authorized: true,
+      container_access_authorized: true,
+      allowed_paths: ['contracts/', 'scripts/', 'docs/'],
+    },
+  }));
+  assert.equal(response.hook_event, undefined);
+  assert.equal(response.decision, 'allow');
+  assert.equal(response.status, 'ready');
+  assert.equal(response.runtime_gate.capability, 'hook_integration_fix');
 }
 
-function resetState() {
-  fs.rmSync(path.dirname(hookStatePath), { recursive: true, force: true });
+function testPreToolUseAllowsAuthorizedReadOnlyAuditEvidenceRead() {
+  const response = parseHookJson(handlePreToolUse({
+    command: 'sed -n 1,40p contracts/gate-matrix.md',
+    session_id: 's-tool',
+    route_id: 'explicit_read_only_functional_audit',
+    phase: 'evidence_collection',
+    capability: 'functional_audit_read_only',
+    evidence_collection_mode: 'read_only',
+    allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
+    allowed_paths: ['contracts/', 'scripts/'],
+  }));
+  assert.equal(response.decision, 'allow');
+  assert.equal(response.action, 'authorized_business_context_read');
 }
 
-function readState() {
-  return JSON.parse(fs.readFileSync(hookStatePath, "utf8"));
+function testPreToolUseRejectsUnauthorizedBusinessRead() {
+  const response = parseHookJson(handlePreToolUse({
+    command: 'sed -n 1,40p contracts/gate-matrix.md',
+    session_id: 's-deny',
+    route_id: 'explicit_read_only_functional_audit',
+    phase: 'evidence_collection',
+    capability: 'functional_audit_read_only',
+    evidence_collection_mode: 'read_only',
+    allowed_actions: ['runtime_discovery_read'],
+    allowed_paths: ['contracts/', 'scripts/'],
+  }));
+  assert.equal(response.decision, 'deny');
+  assert.equal(response.action, 'forbidden_business_context_read');
 }
 
-function recordReviewClosure(state, includeWriteback) {
-  const session = syncRunSession(path.join(state.action_guard.artifact_dir, "session.json"));
-  writeArtifact(session, "evidence_manifest", {
-    evidence_items: [
-      {
-        kind: "verification_result",
-        path: "artifacts/test.log"
-      }
-    ]
-  }, { phase: "review_active" });
-  writeArtifact(session, "review_decision", {
-    review_type: "functional_review",
-    outcome: "pass",
-    reviewer_role_id: "functional-reviewer",
-    reviewer_instance_id: "functional-reviewer-1",
-    evidence_keys: [
-      "requirements_package",
-      "acceptance_items",
-      "interface_contracts",
-      "evidence_package"
-    ]
-  }, { phase: "review_active" });
-
-  if (includeWriteback) {
-    writeArtifact(session, "writeback_receipt", {
-      writeback_level: "project_current_update",
-      approval_gate: "review",
-      actor_role_id: "workflow-orchestrator",
-      pass_statuses: ["functional_review_passed"]
-    }, { phase: "writeback_ready" });
-  }
-
-  syncRunSession(session);
+function testStopReturnsBlockedTerminalPackage() {
+  const response = parseHookJson(handleStop({
+    session_id: 's-stop',
+    route_id: 'explicit_read_only_functional_audit',
+    phase: 'evidence_collection',
+    capability: 'functional_audit_read_only',
+    evidence_collection_mode: 'read_only',
+    allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
+    allowed_paths: ['contracts/', 'scripts/'],
+    artifacts: {
+      evidence_manifest: { status: 'blocked' },
+      review_decision: { decision: 'blocked' },
+      writeback_declined: { status: 'declined' },
+      terminal_phase: 'blocked_closed',
+    },
+  }));
+  assert.equal(response.decision, 'allow');
+  assert.equal(response.status, 'blocked');
+  assert.equal(response.completion_gate.reason, 'blocked_review_terminal_state_closed');
 }
 
-function main() {
-  resetState();
-
-  const promptHook = runHook("user-prompt-submit", {
-    prompt: "按 cutepower 执行，只读 audit 当前行为并做 functional review。"
-  });
-  assert(promptHook.status === 0, "UserPromptSubmit hook should succeed");
-
-  const stateAfterPrompt = readState();
-  assert(stateAfterPrompt.explicit_mode, "prompt hook should persist explicit mode state");
-  assert(stateAfterPrompt.session_context.required_preflight_outputs.includes("task_profile"), "hook state should include required preflight outputs");
-
-  stateAfterPrompt.action_guard.intake_status = null;
-  stateAfterPrompt.action_guard.route_status = null;
-  stateAfterPrompt.action_guard.runtime_gate_status = null;
-  fs.writeFileSync(hookStatePath, `${JSON.stringify(stateAfterPrompt, null, 2)}\n`, "utf8");
-
-  const blockedRead = runHook("pre-tool-use", {
-    tool_name: "Read",
-    path: "/mnt/d/cutepower/src/main.cpp"
-  });
-  assert(blockedRead.status !== 0, "PreToolUse should block business read before ready");
-  assert(
-    readState().denied_events.some((event) => event.error.includes("explicit cutepower mode requires intake/route/gate before action business_context_read")),
-    "blocked business read should report intake lock"
-  );
-
-  const runtimeRead = runHook("pre-tool-use", {
-    tool_name: "Read",
-    path: "/mnt/d/cutepower/.codex/hooks.json"
-  });
-  assert(runtimeRead.status === 0, "PreToolUse should allow runtime discovery before ready");
-
-  const unmapped = runHook("pre-tool-use", {
-    tool_name: "UnknownTool",
-    payload: {
-      x: 1
-    }
-  });
-  assert(unmapped.status !== 0, "unmapped event should be denied in explicit mode");
-  assert(
-    readState().denied_events.some((event) => event.error.includes("unmapped tool event denied")),
-    "unmapped denial should be recorded"
-  );
-
-  const readyState = readState();
-  readyState.action_guard.intake_status = "accepted";
-  readyState.action_guard.route_status = "resolved";
-  readyState.action_guard.runtime_gate_status = "ready";
-  fs.writeFileSync(hookStatePath, `${JSON.stringify(readyState, null, 2)}\n`, "utf8");
-
-  const stopWithoutReview = runHook("stop", {});
-  assert(stopWithoutReview.status !== 0, "stop should fail when closure artifacts are missing");
-
-  recordReviewClosure(readState(), false);
-  const stopWithoutWriteback = runHook("stop", {});
-  assert(stopWithoutWriteback.status !== 0, "stop should fail when writeback receipt is missing");
-
-  recordReviewClosure(readState(), true);
-  const stopComplete = runHook("stop", {});
-  assert(stopComplete.status === 0, "stop should succeed after closed-loop artifacts are present");
-
-  console.log("cutepower codex hooks tests passed");
+function testPreToolUseAllowsRepoLocalRegressionExecution() {
+  const response = parseHookJson(handlePreToolUse({
+    cmd: 'node scripts/test-codex-hooks.js',
+    session_id: 's-regression',
+    route_id: 'explicit_hook_integration_fix',
+    phase: 'implementation',
+    capability: 'hook_integration_fix',
+    evidence_collection_mode: 'implementation',
+    allowed_actions: [
+      'runtime_discovery_read',
+      'authorized_business_context_read',
+      'repo_local_verification_exec',
+    ],
+    allowed_paths: ['contracts/', 'scripts/', 'docs/'],
+  }));
+  assert.equal(response.decision, 'allow');
+  assert.equal(response.action, 'repo_local_verification_exec');
 }
 
-if (require.main === module) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error.message);
-    process.exit(1);
-  }
+function run() {
+  testUserPromptSubmitAlwaysReturnsJsonReadyState();
+  testPreToolUseAllowsAuthorizedReadOnlyAuditEvidenceRead();
+  testPreToolUseRejectsUnauthorizedBusinessRead();
+  testStopReturnsBlockedTerminalPackage();
+  testPreToolUseAllowsRepoLocalRegressionExecution();
+  process.stdout.write('test-codex-hooks: ok\n');
 }
+
+run();

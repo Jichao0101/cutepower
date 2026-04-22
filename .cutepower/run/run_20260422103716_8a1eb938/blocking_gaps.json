@@ -1,0 +1,15 @@
+{
+  "schema": "cutepower.run-artifact/blocking_gaps/v1",
+  "artifact_type": "blocking_gaps",
+  "session_id": "run_20260422103716_8a1eb938",
+  "route_id": "bug_fix_default",
+  "phase": "blocked",
+  "generated_at": "2026-04-22T10:37:16.744Z",
+  "payload": [
+    {
+      "gap_id": "repo_write_authorization",
+      "gap_type": "authorization_missing",
+      "message": "repo write authorization is required before repo-change handoff"
+    }
+  ]
+}

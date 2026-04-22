@@ -1,0 +1,13 @@
+{
+  "schema": "cutepower.run-artifact/runtime_gate/v1",
+  "artifact_type": "runtime_gate",
+  "session_id": "run_20260422103716_8a1eb938",
+  "route_id": "bug_fix_default",
+  "phase": "blocked",
+  "generated_at": "2026-04-22T10:37:16.714Z",
+  "payload": {
+    "status": "blocked",
+    "reason": "blocking_gaps",
+    "fallback_allowed": false
+  }
+}

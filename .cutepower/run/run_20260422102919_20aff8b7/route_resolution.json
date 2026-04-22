@@ -1,0 +1,19 @@
+{
+  "schema": "cutepower.run-artifact/route_resolution/v1",
+  "artifact_type": "route_resolution",
+  "session_id": "run_20260422102919_20aff8b7",
+  "route_id": "unresolved",
+  "phase": "intake_accepted",
+  "generated_at": "2026-04-22T10:29:19.876Z",
+  "payload": {
+    "entry_skill": "using-cutepower",
+    "autostart_enabled": true,
+    "engineering_signal_detected": true,
+    "primary_type": "bug_fix",
+    "primary_type_status": "resolved",
+    "route_id": null,
+    "route_status": "needs_clarification",
+    "fallback_behavior": "fallback_when_cutepower_declines",
+    "skill_chain": []
+  }
+}

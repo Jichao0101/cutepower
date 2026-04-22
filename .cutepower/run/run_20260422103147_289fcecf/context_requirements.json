@@ -1,0 +1,27 @@
+{
+  "schema": "cutepower.run-artifact/context_requirements/v1",
+  "artifact_type": "context_requirements",
+  "session_id": "run_20260422103147_289fcecf",
+  "route_id": "unresolved",
+  "phase": "intake_accepted",
+  "generated_at": "2026-04-22T10:31:47.335Z",
+  "payload": [
+    {
+      "field_id": "repo_root",
+      "status": "resolved",
+      "value": "/mnt/d/cutepower"
+    },
+    {
+      "field_id": "knowledge_base_root",
+      "status": "missing"
+    },
+    {
+      "field_id": "runtime_discovery",
+      "status": "resolved",
+      "value": [
+        "~/.codex",
+        "~/.agents"
+      ]
+    }
+  ]
+}

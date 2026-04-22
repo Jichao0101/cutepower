@@ -1,0 +1,13 @@
+{
+  "schema": "cutepower.run-artifact/runtime_gate/v1",
+  "artifact_type": "runtime_gate",
+  "session_id": "run_20260422102919_20aff8b7",
+  "route_id": "unresolved",
+  "phase": "clarification_required",
+  "generated_at": "2026-04-22T10:29:19.883Z",
+  "payload": {
+    "status": "clarification_required",
+    "reason": "route_resolution_incomplete",
+    "fallback_allowed": false
+  }
+}

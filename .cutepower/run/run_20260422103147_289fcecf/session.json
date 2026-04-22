@@ -1,0 +1,60 @@
+{
+  "schema": "cutepower.run-session/v1",
+  "session_id": "run_20260422103147_289fcecf",
+  "workspace_root": "/mnt/d/cutepower",
+  "artifact_dir": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf",
+  "task_goal": "按 cutepower 的 contracts-first 方式，对当前仓库做一次“Codex hook integration fix”改造。不要泛泛讨论，请直接围绕这次真实暴露出的运行时缺陷做最小可验证修复。\n\n\n重点文件：\n- scripts/codex-hooks.js\n- scripts/host-runtime.js\n- scripts/task-intake.js\n- scripts/runtime-gates.js\n- scripts/test-codex-hooks.js\n- scripts/test-host-runtime.js\n- scripts/test-task-intake.js\n- scripts/test-runtime-gates.js\n- 如有必要可新增：\n  - scripts/run-artifacts.js\n  - schemas/run-artifacts/*.json\n  - docs/hook-integration-fix.md\n\n任务背景（必须对准这些现象修，不要跑偏）：\n1. 实际运行中出现：\n   - UserPromptSubmit hook returned invalid user prompt submit JSON output\n   - Stop hook returned invalid stop hook JSON output\n2. 在 explicit cutepower mode 下，业务读取被自动推断成 business_context_read，但随后又因为 intake/route/gate 不完整而被拒绝，导致：\n   - 用户已经显式授权读取项目路径和容器\n   - 但 hook 仍然阻止任何业务上下文读取\n   - strict read-only functional audit 无法收集 requirements 或 code evidence\n3. stop 阶段又因为缺少：\n   - evidence_manifest\n   - review_decision\n   - writeback_receipt 或 writeback_declined\n   - terminal_phase 未闭合\n   而无法结束本轮\n4. 目标不是削弱 cutepower，而是修复：\n   - hook 输出协议不合法\n   - hook 推断动作与授权/route/capability 脱节\n   - explicit mode 下已授权 read-only audit 不能实际执行\n   - stop 不能正确把 blocked review 收束成合法终态\n\n已知源码现状（请先核对后再改）：\n- README 仍将 complex hooks 视为 non-goal\n- AGENTS.md 仍是 thin runtime bridge\n- runtime-gates.js 仍是 minimal runtime gate evaluator\n- host-runtime.js 注入 required_preflight_outputs，但当前更多是 session context，不是强制 artifact contract\n- task-intake.js 的 buildRuntimeGate() 返回 ready / blocked / declined 等状态\n- codex-hooks.js 中：\n  - 未映射 tool event 仍走字符串提示路径，而非统一结构化 deny\n  - handleStop() 还是 stop summary，不是 completion gate\n  - hook 输出协议与 Codex 期望 JSON 之间显然存在不一致\n- runtime-gates.js 对 writeback 已有尾部校验，但对“blocked audit 的合法终态”支持不足\n\n本次改造目标：\nA. 修复 UserPromptSubmit 和 Stop hook 的 JSON 输出协议，保证 hook 输出始终是合法、稳定、可测试的 JSON，不允许出现“invalid ... JSON output”\nB. 修复 explicit mode 下的 read-only functional audit 流程，使“已授权 + 已声明 read-only audit”时，业务证据读取可以在合法 route/gate 下执行，而不是死锁在 business_context_read denied\nC. 明确区分三类读取：\n   - runtime_discovery_read\n   - authorized_business_context_read\n   - forbidden_business_context_read\n   不能再把所有本地读命令粗暴落到同一种 business_context_read，然后再被 route 错误地拒绝\nD. 对 strict read-only audit 支持最小 capability / phase / artifact 闭环：\n   - 至少允许 requirements evidence 和 code evidence 的只读采集\n   - 不允许写操作或 reviewer 越权\nE. stop hook 必须支持 blocked review 的合法终态收束：\n   - 如果因为 runtime integration defect 或 evidence collection impossible 导致 blocked\n   - 则必须允许输出合法的 blocked review package / writeback_declined\n   - 而不是无限卡在 “run is not closed”\nF. 增加针对本次故障的回归测试，而不是只测 happy path\n\n设计要求：\n1. contracts-first 架构不能破坏；contracts 仍是规则源\n2. 不引入外部数据库或远程服务；先用 repo-local state 完成最小修复\n3. 不要通过“直接放行所有 read”来规避问题；必须是有 route、有 capability、有 phase 的受控只读\n4. 不要削弱 reviewer / writeback 的独立性边界\n5. blocked review 需要成为一等终态，而不是异常残留态\n6. 所有 hook 输出都必须有明确 schema，并由测试验证\n7. 优先修复这四个点：\n   - invalid UserPromptSubmit JSON\n   - invalid Stop hook JSON\n   - authorized read-only audit 被误拒绝\n   - blocked review 无法合法闭环\n\n建议实现方向：\n1. 在 scripts/codex-hooks.js 中：\n   - 明确每个 hook handler 的输出结构\n   - 抽出统一的 emitHookResponse()，保证始终输出合法 JSON\n   - 对 UserPromptSubmit / PreToolUse / Stop 分别定义 schema\n   - 对 inferActionFromHookPayload() 增加 authorized read-only audit 路径\n   - 对已授权 read-only audit 读取，生成 authorized_business_context_read，而不是落到模糊的 business_context_read\n   - 对 unmapped event 继续 deny，但 deny 必须是结构化 JSON，而不是混杂字符串\n2. 在 scripts/task-intake.js 中：\n   - 为 read-only functional audit 生成明确 route_id / phase / allowed_actions\n   - 明确 evidence collection 是否属于 allowed read phase\n   - 对“用户已明确补充授权”的情形，提供可消费的授权字段，避免“同意”这种追加输入无法更新 route/gate\n3. 在 scripts/host-runtime.js 中：\n   - 把显式 read-only audit 的 capability / action_guard 派发清楚\n   - 至少包含：\n     - session_id\n     - route_id\n     - phase\n     - allowed_actions\n     - allowed_paths\n     - evidence_collection_mode=read_only\n4. 在 scripts/runtime-gates.js 中：\n   - 增加 authorized_business_context_read 的 gate 校验\n   - 允许 read-only audit 在合法 phase 下读取 requirements/code evidence\n   - 增加 blocked review terminalization 校验：\n     - evidence_manifest 可为 blocked\n     - review_decision 可为 blocked\n     - writeback_declined 可作为合法终态之一\n5. 如有必要新增 repo-local artifacts：\n   - .cutepower/run/<session_id>/task_profile.json\n   - .cutepower/run/<session_id>/route_resolution.json\n   - .cutepower/run/<session_id>/runtime_gate.json\n   - .cutepower/run/<session_id>/evidence_manifest.json\n   - .cutepower/run/<session_id>/review_decision.json\n   - .cutepower/run/<session_id>/writeback_declined.json\n   但重点不是“多造文件”，而是修通这次失败的 hook 协议和 audit phase\n6. 在测试中覆盖以下负/正路径：\n   - UserPromptSubmit 始终输出合法 JSON\n   - Stop hook 始终输出合法 JSON\n   - 未授权业务读取被拒绝\n   - 已授权 read-only functional audit 允许只读证据采集\n   - blocked review 可以合法结束并生成 writeback_declined\n   - 显式模式下 unmapped event 仍被 deny\n   - review/writeback 越权仍被拒绝\n\n输出要求：\n1. 先给 problem_diagnosis\n2. 再给 minimal_fix_strategy\n3. 然后直接改代码\n4. 最后输出：\n   - changed_files\n   - protocol_changes\n   - route_and_phase_changes\n   - blocked_terminal_state_design\n   - test_results\n   - residual_risks\n\n成功标准：\n- 不再出现 invalid user prompt submit JSON output\n- 不再出现 invalid stop hook JSON output\n- strict cutepower read-only functional audit 在用户已授权时可以实际读取 requirements 和 code evidence\n- blocked review 可以形成合法终态并结束，不会无限卡在 run is not closed\n- reviewer / writeback 边界不被削弱\n- 新增测试能稳定覆盖本次故障链路\n\n边界：\n- 不做复杂 hooks 平台重构\n- 不接外部服务\n- 不改 contracts-first 基本架构\n- 不通过关闭 explicit mode 来规避问题",
+  "execution_mode": "explicit_cutepower",
+  "explicit_mode": true,
+  "route_id": "unresolved",
+  "required_gates": [],
+  "writeback_level": null,
+  "runtime_gate_status": "clarification_required",
+  "created_at": "2026-04-22T10:31:47.300Z",
+  "updated_at": "2026-04-22T10:32:07.186Z",
+  "current_phase": "clarification_required",
+  "capability_secret": "b731d61dcfd622d8662cf1bcd207bfa8",
+  "last_capability": {
+    "schema": "cutepower.session-capability/v1",
+    "capability_id": "a6f9748e-cee5-4f51-ab63-ea9fc6c33f67",
+    "capability_token": "b731d61dcfd622d8662cf1bcd207bfa8",
+    "session_id": "run_20260422103147_289fcecf",
+    "route_id": "unresolved",
+    "phase": "clarification_required",
+    "allowed_actions": [
+      "business_context_read"
+    ],
+    "artifact_dir": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf",
+    "issued_at": "2026-04-22T10:32:07.186Z",
+    "expires_at": "2026-04-22T11:02:07.186Z"
+  },
+  "artifact_plan": {
+    "session_id": "run_20260422103147_289fcecf",
+    "artifact_dir": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf",
+    "preflight_artifacts": [
+      "task_profile",
+      "route_resolution",
+      "runtime_gate",
+      "context_requirements",
+      "blocking_gaps"
+    ],
+    "terminal_artifacts": [
+      "task_profile",
+      "route_resolution",
+      "runtime_gate",
+      "context_requirements",
+      "blocking_gaps"
+    ],
+    "files": {
+      "task_profile": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf/task_profile.json",
+      "route_resolution": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf/route_resolution.json",
+      "runtime_gate": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf/runtime_gate.json",
+      "context_requirements": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf/context_requirements.json",
+      "blocking_gaps": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf/blocking_gaps.json",
+      "evidence_manifest": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf/evidence_manifest.json",
+      "review_decision": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf/review_decision.json",
+      "writeback_receipt": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf/writeback_receipt.json",
+      "writeback_declined": "/mnt/d/cutepower/.cutepower/run/run_20260422103147_289fcecf/writeback_declined.json"
+    }
+  }
+}

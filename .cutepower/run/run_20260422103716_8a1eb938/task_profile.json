@@ -1,0 +1,42 @@
+{
+  "schema": "cutepower.run-artifact/task_profile/v1",
+  "artifact_type": "task_profile",
+  "session_id": "run_20260422103716_8a1eb938",
+  "route_id": "bug_fix_default",
+  "phase": "intake_accepted",
+  "generated_at": "2026-04-22T10:37:16.682Z",
+  "payload": {
+    "entry_skill": "using-cutepower",
+    "task_goal": "以功能修复为主，可以不是最小可验证修复",
+    "primary_type": "bug_fix",
+    "primary_type_status": "resolved",
+    "task_modifiers": [
+      "code_change_allowed",
+      "functional_scope",
+      "review_required"
+    ],
+    "route_id": "bug_fix_default",
+    "route_status": "resolved",
+    "inferred_context": {
+      "repo_root": "/mnt/d/cutepower"
+    },
+    "missing_context": [],
+    "requires_clarification": false,
+    "inference_trace": {
+      "primary_type_terms": [
+        "修复"
+      ],
+      "modifier_terms": {
+        "functional_scope": [
+          "功能"
+        ],
+        "code_change_allowed": [
+          "修复"
+        ],
+        "review_required": [
+          "修复"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schema": "cutepower.run-artifact/context_requirements/v1",
+  "artifact_type": "context_requirements",
+  "session_id": "run_20260422103716_8a1eb938",
+  "route_id": "bug_fix_default",
+  "phase": "intake_accepted",
+  "generated_at": "2026-04-22T10:37:16.729Z",
+  "payload": [
+    {
+      "field_id": "repo_root",
+      "status": "resolved",
+      "value": "/mnt/d/cutepower"
+    }
+  ]
+}

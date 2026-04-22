@@ -1,519 +1,383 @@
 #!/usr/bin/env node
-
-const fs = require("fs");
-const os = require("os");
-const path = require("path");
+'use strict';
 
 const {
-  deriveCurrentPhase,
-  issueSessionCapability,
-  loadRunSession,
-  validateCompletion
-} = require("./run-artifacts");
-const { buildSessionContextEnvelope } = require("./host-runtime");
-const { evaluateRuntimeRequest, validateRunCompletion } = require("./runtime-gates");
+  buildHostRuntime,
+  coerceHostRuntime,
+} = require('./host-runtime');
+const {
+  buildRuntimeGate,
+} = require('./task-intake');
+const {
+  buildBlockedTerminalArtifacts,
+  evaluateStopGate,
+  gateToolAction,
+} = require('./runtime-gates');
 
-const pluginRoot = path.resolve(__dirname, "..");
+const HOOK_SCHEMAS = Object.freeze({
+  UserPromptSubmit: Object.freeze({
+    required: ['hook_event', 'decision', 'status', 'session'],
+  }),
+  PreToolUse: Object.freeze({
+    required: ['hook_event', 'decision', 'status', 'action', 'session'],
+  }),
+  Stop: Object.freeze({
+    required: ['hook_event', 'decision', 'status', 'completion_gate', 'session'],
+  }),
+});
 
-function getWorkspaceRoot() {
-  return process.env.CODEX_WORKSPACE_ROOT || process.cwd();
-}
-
-function getHookStateDir() {
-  const workspaceRoot = getWorkspaceRoot();
-  return path.join(os.tmpdir(), `cutepower-hook-state-${Buffer.from(workspaceRoot).toString("hex").slice(0, 24)}`);
-}
-
-function getHookStatePath() {
-  return path.join(getHookStateDir(), "cutepower-state.json");
-}
-
-function getPluginRuntimePaths() {
-  return [
-    path.join(pluginRoot, ".codex").replace(/\\/g, "/"),
-    path.join(pluginRoot, ".agents").replace(/\\/g, "/"),
-    path.join(pluginRoot, ".codex-plugin").replace(/\\/g, "/"),
-    path.join(pluginRoot, "agents").replace(/\\/g, "/"),
-    path.join(pluginRoot, "contracts").replace(/\\/g, "/"),
-    path.join(pluginRoot, "scripts", "host-runtime.js").replace(/\\/g, "/"),
-    path.join(pluginRoot, "scripts", "task-intake.js").replace(/\\/g, "/"),
-    path.join(pluginRoot, "scripts", "runtime-gates.js").replace(/\\/g, "/")
-  ];
-}
-
-const hookStateDir = getHookStateDir();
-const hookStatePath = path.join(hookStateDir, "cutepower-state.json");
-
-function hookError(message, context = {}) {
-  const error = new Error(message);
-  error.context = context;
-  return error;
-}
-
-function readJsonText(value) {
-  if (typeof value !== "string" || !value.trim()) {
-    return null;
+function parseJsonOrDefault(value, fallback) {
+  if (value == null || value === '') {
+    return fallback;
   }
-
+  if (typeof value === 'object') {
+    return value;
+  }
   try {
     return JSON.parse(value);
-  } catch (error) {
-    return null;
+  } catch (_error) {
+    return fallback;
   }
 }
 
-async function readHookPayload() {
-  for (const envKey of ["CODEX_HOOK_PAYLOAD", "CODEX_HOOK_INPUT", "CODEX_HOOK_EVENT"]) {
-    const parsed = readJsonText(process.env[envKey]);
-    if (parsed) {
-      return parsed;
-    }
-  }
-
+function readStdin() {
   return new Promise((resolve) => {
-    let settled = false;
-    let buffer = "";
-
-    const finish = (value) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timer);
-      resolve(value);
-    };
-
-    const timer = setTimeout(() => finish({}), 50);
-
-    process.stdin.setEncoding("utf8");
-    process.stdin.on("data", (chunk) => {
-      buffer += chunk;
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => {
+      data += chunk;
     });
-    process.stdin.on("end", () => {
-      finish(readJsonText(buffer.trim()) || {});
-    });
-    process.stdin.on("error", () => {
-      finish({});
-    });
-
+    process.stdin.on('end', () => resolve(data));
     process.stdin.resume();
-    if (process.stdin.isTTY) {
-      finish({});
-    }
   });
 }
 
-function ensureStateDir() {
-  fs.mkdirSync(hookStateDir, { recursive: true });
-}
-
-function readState() {
-  const statePath = getHookStatePath();
-  if (!fs.existsSync(hookStatePath)) {
-    return {
-      explicit_mode: false,
-      denied_events: [],
-      unmapped_events: []
-    };
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
   }
-
-  return JSON.parse(fs.readFileSync(statePath, "utf8"));
+  if (value && typeof value === 'object') {
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
-function writeState(state) {
-  const statePath = getHookStatePath();
-  ensureStateDir();
-  fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-}
-
-function getNestedString(payload, candidates) {
-  for (const candidate of candidates) {
-    const segments = candidate.split(".");
-    let current = payload;
-    let found = true;
-    for (const segment of segments) {
-      if (current == null || typeof current !== "object" || !(segment in current)) {
-        found = false;
-        break;
-      }
-      current = current[segment];
-    }
-    if (found && typeof current === "string" && current.trim()) {
-      return current;
+function ensureSchemaFields(hookName, response) {
+  const schema = HOOK_SCHEMAS[hookName];
+  if (!schema) {
+    return response;
+  }
+  for (const key of schema.required) {
+    if (!(key in response)) {
+      response[key] = null;
     }
   }
-  return "";
+  return response;
 }
 
-function getNestedValue(payload, candidates) {
-  for (const candidate of candidates) {
-    const segments = candidate.split(".");
-    let current = payload;
-    let found = true;
-    for (const segment of segments) {
-      if (current == null || typeof current !== "object" || !(segment in current)) {
-        found = false;
-        break;
-      }
-      current = current[segment];
-    }
-    if (found && current != null) {
-      return current;
-    }
-  }
-  return null;
-}
-
-function extractPrompt(payload) {
-  return getNestedString(payload, [
-    "prompt",
-    "user_prompt",
-    "text",
-    "message",
-    "input",
-    "payload.prompt",
-    "payload.user_prompt",
-    "payload.text",
-    "payload.message"
-  ]);
-}
-
-function extractToolName(payload) {
-  return getNestedString(payload, [
-    "tool_name",
-    "tool.name",
-    "tool",
-    "matcher",
-    "payload.tool_name",
-    "payload.tool.name",
-    "payload.tool"
-  ]);
-}
-
-function extractCommand(payload) {
-  const direct = getNestedString(payload, [
-    "command",
-    "tool_input.command",
-    "tool_input.cmd",
-    "input.command",
-    "input.cmd",
-    "arguments.command",
-    "arguments.cmd",
-    "payload.command",
-    "payload.tool_input.command",
-    "payload.tool_input.cmd"
-  ]);
-
-  if (direct) {
-    return direct;
-  }
-
-  const listValue = getNestedValue(payload, ["command", "payload.command"]);
-  if (Array.isArray(listValue)) {
-    return listValue.join(" ");
-  }
-
-  return "";
-}
-
-function extractPaths(payload) {
-  const values = [];
-  for (const key of [
-    "path",
-    "file_path",
-    "tool_input.path",
-    "input.path",
-    "payload.path",
-    "payload.tool_input.path"
-  ]) {
-    const value = getNestedValue(payload, [key]);
-    if (typeof value === "string" && value.trim()) {
-      values.push(value);
-    }
-  }
-  return values;
-}
-
-function isRuntimePath(candidatePath) {
-  const normalized = String(candidatePath || "").replace(/\\/g, "/");
-  return getPluginRuntimePaths().some((runtimePath) => normalized.includes(runtimePath));
-}
-
-function inferReadAction(command, paths) {
-  if (paths.some((entry) => isRuntimePath(entry))) {
-    return "runtime_discovery_read";
-  }
-
-  const runtimeMarkers = [".codex", ".agents", ".codex-plugin", "host-runtime.js", "task-intake.js", "runtime-gates.js"];
-  if (runtimeMarkers.some((marker) => command.includes(marker))) {
-    return "runtime_discovery_read";
-  }
-
-  return "business_context_read";
-}
-
-function inferActionFromHookPayload(payload) {
-  if (payload.cutepower_request && typeof payload.cutepower_request === "object") {
-    return {
-      mode: "direct",
-      request: payload.cutepower_request
-    };
-  }
-
-  const toolName = extractToolName(payload);
-  const command = extractCommand(payload);
-  const paths = extractPaths(payload);
-  const readLike = /(Read|Open|Grep|Glob|Search|List|View)/i.test(toolName);
-  const writeLike = /(Edit|Write|MultiEdit|ApplyPatch)/i.test(toolName);
-  const shellLike = /(Bash|Shell|functions\.exec_command)/i.test(toolName);
-
-  if (readLike) {
-    return {
-      mode: "inferred",
-      request: {
-        request_type: "skill_invocation",
-        skill_id: "using-cutepower",
-        role_id: "workflow-orchestrator",
-        requested_actions: [inferReadAction(command, paths)]
-      }
-    };
-  }
-
-  if (writeLike) {
-    return {
-      mode: "inferred",
-      request: {
-        request_type: "skill_invocation",
-        skill_id: "cute-repo-change",
-        role_id: "repo-coder",
-        state: "implementation",
-        requested_actions: ["repo_write"]
-      }
-    };
-  }
-
-  if (shellLike) {
-    const normalizedCommand = command.trim();
-    if (!normalizedCommand) {
-      return null;
-    }
-
-    if (/^(cat|sed|rg|find|ls|nl|wc)\b/.test(normalizedCommand)) {
-      return {
-        mode: "inferred",
-        request: {
-          request_type: "skill_invocation",
-          skill_id: "using-cutepower",
-          role_id: "workflow-orchestrator",
-          requested_actions: [inferReadAction(normalizedCommand, paths)]
-        }
-      };
-    }
-
-    if (/apply_patch|git apply|patch\b|^mv\b|^cp\b/.test(normalizedCommand)) {
-      return {
-        mode: "inferred",
-        request: {
-          request_type: "skill_invocation",
-          skill_id: "cute-repo-change",
-          role_id: "repo-coder",
-          state: "implementation",
-          requested_actions: ["repo_write"]
-        }
-      };
-    }
-  }
-
-  return null;
-}
-
-function mergeGuard(request, state) {
-  return {
-    ...request,
-    ...(state.action_guard || {})
-  };
-}
-
-function inferGateStateForRequest(request, session) {
-  if (request.request_type === "review_decision") {
-    return "review";
-  }
-  if (request.request_type === "writeback") {
-    return "writeback";
-  }
-
-  const actions = request.requested_actions || [];
-  if (actions.includes("repo_write") || actions.includes("verification_write") || actions.includes("board_execute")) {
-    return "implementation";
-  }
-
-  if (deriveCurrentPhase(session) === "review_active") {
-    return "review";
-  }
-
-  return "analysis";
-}
-
-function attachDerivedCapability(request, state) {
-  const actions = Array.isArray(request.requested_actions)
-    ? request.requested_actions
-    : request.request_type === "writeback"
-      ? [request.writeback_level]
-      : [];
-
-  const runtimeDiscoveryOnly = actions.length > 0 && actions.every((action) => action === "runtime_discovery_read");
-  if (runtimeDiscoveryOnly) {
-    return request;
-  }
-
-  const artifactDir = request.artifact_dir || state.action_guard?.artifact_dir;
-  if (!artifactDir) {
-    throw hookError("explicit mode request is missing artifact_dir");
-  }
-
-  const session = loadRunSession(artifactDir);
-  const phase = deriveCurrentPhase(session);
-  const capability = request.session_capability || issueSessionCapability(session, {
-    phase,
-    allowed_actions: actions,
-    route_id: request.route_id || session.route_id
+function emitHookResponse(hookName, response) {
+  const normalized = ensureSchemaFields(hookName, {
+    hook_event: hookName,
+    protocol_version: 'codex-hook-v1',
+    ...response,
   });
+  const json = stableStringify(normalized);
+  process.stdout.write(`${json}\n`);
+  return normalized;
+}
+
+function getCommand(payload) {
+  if (typeof payload.cmd === 'string') {
+    return payload.cmd;
+  }
+  if (typeof payload.command === 'string') {
+    return payload.command;
+  }
+  if (Array.isArray(payload.command)) {
+    return payload.command.join(' ');
+  }
+  if (payload.tool_input && typeof payload.tool_input.cmd === 'string') {
+    return payload.tool_input.cmd;
+  }
+  if (payload.tool_input && typeof payload.tool_input.command === 'string') {
+    return payload.tool_input.command;
+  }
+  if (payload.input && typeof payload.input.cmd === 'string') {
+    return payload.input.cmd;
+  }
+  if (payload.input && typeof payload.input.command === 'string') {
+    return payload.input.command;
+  }
+  if (typeof payload.tool_input === 'string') {
+    return payload.tool_input;
+  }
+  return '';
+}
+
+function lowerCaseSet(values) {
+  return new Set((values || []).map((item) => String(item).toLowerCase()));
+}
+
+function inferActionFromHookPayload(payload, hostRuntime) {
+  const command = getCommand(payload).trim();
+  if (!command) {
+    return {
+      action: 'runtime_discovery_read',
+      reason: 'empty_command_treated_as_runtime_discovery',
+      command,
+    };
+  }
+
+  const tokens = command.split(/\s+/);
+  const verb = tokens[0].toLowerCase();
+  const readOnlyVerbs = lowerCaseSet([
+    'cat',
+    'sed',
+    'rg',
+    'grep',
+    'find',
+    'ls',
+    'pwd',
+    'git',
+    'head',
+    'tail',
+    'wc',
+    'sort',
+    'uniq',
+  ]);
+  const mutatingVerbs = lowerCaseSet([
+    'rm',
+    'mv',
+    'cp',
+    'touch',
+    'tee',
+    'mkdir',
+    'node',
+    'npm',
+    'pnpm',
+    'yarn',
+    'python',
+    'python3',
+    'bash',
+    'sh',
+  ]);
+  const allowedPaths = (hostRuntime.allowed_paths || []).map((item) => String(item));
+  const allowedActions = new Set((hostRuntime.allowed_actions || []).map((item) => String(item)));
+  const evidenceReadOnly = hostRuntime.evidence_collection_mode === 'read_only';
+  const commandTargetsAllowedPath = allowedPaths.some((prefix) => command.includes(prefix));
+  const commandTargetsRepoEvidence = /contracts\/|README|AGENTS|docs\/|scripts\//.test(command);
+  const isRepoLocalRegressionTest = /^node\s+scripts\/test-[\w-]+\.js(?:\s|$)/.test(command);
+
+  if (verb === 'pwd') {
+    return {
+      action: 'runtime_discovery_read',
+      reason: 'pwd_is_runtime_discovery',
+      command,
+    };
+  }
+
+  if (verb === 'git') {
+    if (/git\s+(show|diff|status|log)\b/.test(command)) {
+      return {
+        action: commandTargetsAllowedPath || !commandTargetsRepoEvidence
+          ? 'authorized_business_context_read'
+          : 'forbidden_business_context_read',
+        reason: commandTargetsAllowedPath
+          ? 'git_read_within_allowed_paths'
+          : 'git_read_targets_business_context_without_authorization',
+        command,
+      };
+    }
+    return {
+      action: 'forbidden_business_context_read',
+      reason: 'git_mutation_or_unknown_git_command',
+      command,
+    };
+  }
+
+  if (readOnlyVerbs.has(verb)) {
+    if (!commandTargetsRepoEvidence) {
+      return {
+        action: 'runtime_discovery_read',
+        reason: 'read_only_command_without_business_context_target',
+        command,
+      };
+    }
+    if (
+      evidenceReadOnly
+      && commandTargetsAllowedPath
+      && allowedActions.has('authorized_business_context_read')
+    ) {
+      return {
+        action: 'authorized_business_context_read',
+        reason: 'read_only_audit_evidence_collection_authorized',
+        command,
+      };
+    }
+    return {
+      action: 'forbidden_business_context_read',
+      reason: 'business_context_read_missing_explicit_authorization_or_route',
+      command,
+    };
+  }
+
+  if (verb === 'node' && isRepoLocalRegressionTest) {
+    return {
+      action: 'repo_local_verification_exec',
+      reason: 'repo_local_regression_test_allowed_for_verification',
+      command,
+    };
+  }
+
+  if (mutatingVerbs.has(verb)) {
+    return {
+      action: 'forbidden_business_context_read',
+      reason: 'mutating_or_unreviewed_command_denied_in_hook_layer',
+      command,
+    };
+  }
 
   return {
-    ...request,
-    route_id: request.route_id || session.route_id,
-    artifact_dir: artifactDir,
-    state: request.state || inferGateStateForRequest(request, session),
-    session_capability: capability
+    action: 'forbidden_business_context_read',
+    reason: 'unmapped_tool_event_denied_in_explicit_cutepower_mode',
+    command,
   };
 }
 
 function handleUserPromptSubmit(payload) {
-  const prompt = extractPrompt(payload);
-  if (!prompt) {
-    return "";
-  }
-
-  const envelope = buildSessionContextEnvelope({
-    task_goal: prompt,
-    cwd: getWorkspaceRoot()
+  const intake = buildRuntimeGate(payload);
+  const hostRuntime = buildHostRuntime({
+    ...payload,
+    runtime_gate: intake,
   });
-
-  const nextState = {
-    ...readState(),
-    updated_at: new Date().toISOString(),
-    last_prompt: prompt,
-    explicit_mode: envelope.host_runtime.explicit_mode === true,
-    intake_package: envelope.intake_package,
-    action_guard: envelope.host_runtime.action_guard,
-    session_context: envelope.host_runtime.session_context,
-    session_capability: envelope.host_runtime.session_capability,
-    denied_events: [],
-    unmapped_events: []
+  const ready = intake.status === 'ready';
+  return {
+    decision: ready ? 'allow' : 'deny',
+    status: ready ? 'ready' : intake.status,
+    reason: ready ? 'runtime_gate_ready' : 'runtime_gate_not_ready',
+    session: {
+      session_id: hostRuntime.session_id,
+      route_id: hostRuntime.route_id,
+      phase: hostRuntime.phase,
+      capability: hostRuntime.capability,
+    },
+    runtime_gate: intake,
   };
-  writeState(nextState);
-
-  if (!nextState.explicit_mode) {
-    return "";
-  }
-
-  return [
-    "[cutepower hook] explicit cutepower mode is active",
-    ...nextState.session_context.warning_lines,
-    `[cutepower hook] required preflight outputs: ${nextState.session_context.required_preflight_outputs.join(", ")}`
-  ].join("\n");
 }
 
 function handlePreToolUse(payload) {
-  const state = readState();
-  if (!state.explicit_mode) {
-    return "";
-  }
-
-  const inferred = inferActionFromHookPayload(payload);
-  if (!inferred) {
-    const deniedEvent = {
-      at: new Date().toISOString(),
-      tool_name: extractToolName(payload),
-      command: extractCommand(payload),
-      error: "unmapped tool event denied in explicit cutepower mode"
-    };
-    state.unmapped_events.push(deniedEvent);
-    state.denied_events.push(deniedEvent);
-    writeState(state);
-    throw hookError("unmapped tool event denied in explicit cutepower mode");
-  }
-
-  const request = attachDerivedCapability(mergeGuard(inferred.request, state), state);
-
-  try {
-    evaluateRuntimeRequest(request);
-  } catch (error) {
-    state.denied_events.push({
-      at: new Date().toISOString(),
-      tool_name: extractToolName(payload),
-      command: extractCommand(payload),
-      request,
-      error: error.message
-    });
-    writeState(state);
-    throw error;
-  }
-
-  return "";
+  const hostRuntime = coerceHostRuntime(payload);
+  const inferred = inferActionFromHookPayload(payload, hostRuntime);
+  const gate = gateToolAction({
+    action: inferred.action,
+    hostRuntime,
+    command: inferred.command,
+  });
+  return {
+    decision: gate.decision,
+    status: gate.status,
+    reason: gate.reason || inferred.reason,
+    action: inferred.action,
+    command: inferred.command,
+    session: {
+      session_id: hostRuntime.session_id,
+      route_id: hostRuntime.route_id,
+      phase: hostRuntime.phase,
+      capability: hostRuntime.capability,
+    },
+    guard_result: gate,
+  };
 }
 
-function handleStop() {
-  const state = readState();
-  if (!state.explicit_mode) {
-    return "";
-  }
-
-  const completion = validateRunCompletion(state.action_guard?.artifact_dir);
-  if (!completion.ok) {
-    throw hookError(`explicit cutepower run is not closed: ${completion.missing.join(", ")}`, completion);
-  }
-
-  const denied = state.denied_events || [];
-  const unmapped = state.unmapped_events || [];
-  return [
-    "[cutepower hook] stop summary",
-    `[cutepower hook] explicit mode: ${state.explicit_mode}`,
-    `[cutepower hook] phase: ${completion.current_phase}`,
-    `[cutepower hook] denied events: ${denied.length}`,
-    `[cutepower hook] unmapped tool events: ${unmapped.length}`
-  ].join("\n");
+function handleStop(payload) {
+  const hostRuntime = coerceHostRuntime(payload);
+  const completionGate = evaluateStopGate({
+    hostRuntime,
+    artifacts: payload.artifacts || payload,
+  });
+  const blockedArtifacts = completionGate.status === 'blocked'
+    ? buildBlockedTerminalArtifacts({
+        sessionId: hostRuntime.session_id,
+        routeId: hostRuntime.route_id,
+        blockedReason: completionGate.reason,
+      })
+    : null;
+  return {
+    decision: completionGate.decision,
+    status: completionGate.status,
+    reason: completionGate.reason,
+    session: {
+      session_id: hostRuntime.session_id,
+      route_id: hostRuntime.route_id,
+      phase: hostRuntime.phase,
+      capability: hostRuntime.capability,
+    },
+    completion_gate: completionGate,
+    blocked_terminal_package: blockedArtifacts,
+  };
 }
 
 async function main() {
-  const mode = process.argv[2];
-  if (!mode) {
-    throw hookError("hook mode is required");
-  }
+  const hookName = process.argv[2] || 'Unknown';
+  const stdin = await readStdin();
+  const payload = parseJsonOrDefault(stdin, {});
 
-  const payload = await readHookPayload();
-  let output = "";
-
-  if (mode === "user-prompt-submit") {
-    output = handleUserPromptSubmit(payload);
-  } else if (mode === "pre-tool-use") {
-    output = handlePreToolUse(payload);
-  } else if (mode === "stop") {
-    output = handleStop(payload);
-  } else {
-    throw hookError(`unsupported hook mode: ${mode}`);
-  }
-
-  if (output) {
-    console.log(output);
+  try {
+    if (hookName === 'UserPromptSubmit') {
+      emitHookResponse(hookName, handleUserPromptSubmit(payload));
+      return;
+    }
+    if (hookName === 'PreToolUse') {
+      emitHookResponse(hookName, handlePreToolUse(payload));
+      return;
+    }
+    if (hookName === 'Stop') {
+      emitHookResponse(hookName, handleStop(payload));
+      return;
+    }
+    emitHookResponse(hookName, {
+      decision: 'deny',
+      status: 'denied',
+      reason: 'unsupported_hook_event',
+      session: {
+        session_id: payload.session_id || 'unknown-session',
+        route_id: payload.route_id || null,
+        phase: payload.phase || null,
+        capability: null,
+      },
+    });
+  } catch (error) {
+    emitHookResponse(hookName, {
+      decision: 'deny',
+      status: 'error',
+      reason: 'hook_handler_exception',
+      error: {
+        name: error.name,
+        message: error.message,
+      },
+      session: {
+        session_id: payload.session_id || 'unknown-session',
+        route_id: payload.route_id || null,
+        phase: payload.phase || null,
+        capability: null,
+      },
+    });
+    process.exitCode = 1;
   }
 }
 
+module.exports = {
+  HOOK_SCHEMAS,
+  emitHookResponse,
+  handlePreToolUse,
+  handleStop,
+  handleUserPromptSubmit,
+  inferActionFromHookPayload,
+  parseJsonOrDefault,
+  stableStringify,
+};
+
 if (require.main === module) {
-  main().catch((error) => {
-    if (error.message) {
-      console.error(error.message);
-    }
-    process.exit(2);
-  });
+  main();
 }

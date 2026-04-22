@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schemas/run-artifacts/review-decision.json",
+  "type": "object",
+  "required": ["session_id", "route_id", "decision"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "route_id": { "type": "string" },
+    "decision": { "enum": ["approved", "blocked"] },
+    "reason": { "type": "string" }
+  },
+  "additionalProperties": true
+}

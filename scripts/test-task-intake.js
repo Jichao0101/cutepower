@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('assert');
-const { buildRuntimeGate } = require('./task-intake');
+const { analyzeCutepowerIntent, buildRuntimeGate } = require('./task-intake');
 
 function testExplicitReadOnlyAuditGetsReadyGateWithAuthorization() {
   const gate = buildRuntimeGate({
@@ -53,10 +53,18 @@ function testExplicitHookIntegrationFixGetsImplementationRoute() {
   ]);
 }
 
+function testGeneralPromptDoesNotRequestCutepowerGovernance() {
+  const intent = analyzeCutepowerIntent({
+    prompt: 'Explain this repo',
+  });
+  assert.equal(intent.should_consider_cutepower, false);
+}
+
 function run() {
   testExplicitReadOnlyAuditGetsReadyGateWithAuthorization();
   testExplicitReadOnlyAuditBlocksWithoutAuthorization();
   testExplicitHookIntegrationFixGetsImplementationRoute();
+  testGeneralPromptDoesNotRequestCutepowerGovernance();
   process.stdout.write('test-task-intake: ok\n');
 }
 

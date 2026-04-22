@@ -1,7 +1,58 @@
 'use strict';
 
+function extractPromptText(input = {}) {
+  return String(
+    input.prompt
+    || input.user_prompt
+    || input.text
+    || (input.input && (input.input.prompt || input.input.user_prompt || input.input.text))
+    || ''
+  );
+}
+
+function analyzeCutepowerIntent(input = {}) {
+  const prompt = extractPromptText(input).trim();
+  const normalizedPrompt = prompt.toLowerCase();
+  const explicitCutepowerTerms = [
+    /\bcutepower\b/,
+    /\bstrict cutepower\b/,
+    /\bexplicit cutepower\b/,
+    /\bexplicit mode\b/,
+    /\bcute-[\w-]+\b/,
+    /read-?only functional audit/,
+    /functional audit/,
+    /readonly audit/,
+    /read only audit/,
+  ];
+  const repoGovernanceTerms = [
+    /\breview\b/,
+    /\bcode review\b/,
+    /\bfunctional review\b/,
+    /\bwriteback\b/,
+    /\bboard_execute\b/,
+    /\bboard execute\b/,
+    /protected business execution/,
+    /\bincident\b/,
+  ];
+  const isExplicitCutepowerRequest = explicitCutepowerTerms.some((pattern) => pattern.test(normalizedPrompt));
+  const isRepoGovernanceTask = repoGovernanceTerms.some((pattern) => pattern.test(normalizedPrompt));
+  const isGreetingLike = /^(?:hi|hello|hey|hallo|你好|您好|嗨|哈喽)\b[!\s]*$/i.test(prompt);
+  const isGeneralRepoQuestion = /^(?:please\s+)?(?:explain|summarize|describe)\s+(?:this|the)\s+repo\b/i.test(prompt);
+
+  return {
+    prompt,
+    normalized_prompt: normalizedPrompt,
+    is_explicit_cutepower_request: isExplicitCutepowerRequest,
+    is_repo_governance_task: isRepoGovernanceTask,
+    is_greeting_like: isGreetingLike,
+    is_general_repo_question: isGeneralRepoQuestion,
+    should_consider_cutepower: isExplicitCutepowerRequest || isRepoGovernanceTask,
+  };
+}
+
 function normalizeTaskProfile(input = {}) {
-  const prompt = String(input.prompt || input.user_prompt || '').toLowerCase();
+  const intent = analyzeCutepowerIntent(input);
+  const prompt = intent.normalized_prompt;
   const explicitMode = input.explicit_mode !== false;
   const requestedAudit = /functional audit|read-only audit|readonly audit|read only audit/.test(prompt)
     || input.audit_mode === 'functional_read_only';
@@ -28,6 +79,7 @@ function normalizeTaskProfile(input = {}) {
         ? 'hook_integration_fix'
         : 'unknown',
     requested_outputs: ['task_profile', 'route_resolution', 'runtime_gate'],
+    governance_signal: intent.should_consider_cutepower,
   };
 }
 
@@ -206,8 +258,10 @@ function buildRuntimeGate(input = {}) {
 }
 
 module.exports = {
+  analyzeCutepowerIntent,
   buildRuntimeGate,
   extractAuthorization,
+  extractPromptText,
   normalizeTaskProfile,
   resolveRoute,
 };

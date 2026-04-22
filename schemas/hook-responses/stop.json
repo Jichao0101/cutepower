@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cutepower Stop hook response",
+  "type": "object",
+  "required": [
+    "hook_event",
+    "protocol_version",
+    "decision",
+    "status",
+    "completion_gate",
+    "session",
+    "diagnostics"
+  ]
+}

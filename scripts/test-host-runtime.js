@@ -55,10 +55,19 @@ function testBuildHostRuntimeSupportsHookIntegrationFixCapability() {
   assert.equal(runtime.capability, 'hook_integration_fix');
 }
 
+function testBuildHostRuntimeMarksNonGovernanceInputAsUnmanaged() {
+  const runtime = buildHostRuntime({
+    session_id: 's-general',
+    prompt: 'hallo',
+  });
+  assert.equal(runtime.managed_by_cutepower, false);
+}
+
 function run() {
   testBuildHostRuntimeCarriesArtifactContract();
   testCoerceHostRuntimePreservesReadOnlyAuditCapability();
   testBuildHostRuntimeSupportsHookIntegrationFixCapability();
+  testBuildHostRuntimeMarksNonGovernanceInputAsUnmanaged();
   process.stdout.write('test-host-runtime: ok\n');
 }
 

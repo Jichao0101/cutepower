@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 const {
   buildHostRuntime,
   coerceHostRuntime,
 } = require('./host-runtime');
 const {
+  analyzeCutepowerIntent,
   buildRuntimeGate,
+  extractPromptText,
 } = require('./task-intake');
 const {
   buildBlockedTerminalArtifacts,
@@ -16,14 +21,22 @@ const {
 
 const HOOK_SCHEMAS = Object.freeze({
   UserPromptSubmit: Object.freeze({
-    required: ['hook_event', 'decision', 'status', 'session'],
+    required: ['hook_event', 'decision', 'status', 'entry_action', 'session', 'diagnostics'],
   }),
   PreToolUse: Object.freeze({
-    required: ['hook_event', 'decision', 'status', 'action', 'session'],
+    required: ['hook_event', 'decision', 'status', 'action', 'session', 'diagnostics'],
   }),
   Stop: Object.freeze({
-    required: ['hook_event', 'decision', 'status', 'completion_gate', 'session'],
+    required: ['hook_event', 'decision', 'status', 'completion_gate', 'session', 'diagnostics'],
   }),
+});
+
+const HOOK_NAME_ALIASES = Object.freeze({
+  'user-prompt-submit': 'UserPromptSubmit',
+  userpromptsubmit: 'UserPromptSubmit',
+  pretooluse: 'PreToolUse',
+  'pre-tool-use': 'PreToolUse',
+  stop: 'Stop',
 });
 
 function parseJsonOrDefault(value, fallback) {
@@ -87,6 +100,22 @@ function emitHookResponse(hookName, response) {
   return normalized;
 }
 
+function normalizeHookName(rawHookName) {
+  if (!rawHookName) {
+    return 'Unknown';
+  }
+  return HOOK_NAME_ALIASES[String(rawHookName)] || rawHookName;
+}
+
+function buildSessionView(hostRuntime, fallbackPayload = {}) {
+  return {
+    session_id: hostRuntime.session_id || fallbackPayload.session_id || fallbackPayload.sessionId || 'unknown-session',
+    route_id: hostRuntime.route_id || fallbackPayload.route_id || null,
+    phase: hostRuntime.phase || fallbackPayload.phase || null,
+    capability: hostRuntime.capability || fallbackPayload.capability || null,
+  };
+}
+
 function getCommand(payload) {
   if (typeof payload.cmd === 'string') {
     return payload.cmd;
@@ -117,6 +146,104 @@ function getCommand(payload) {
 
 function lowerCaseSet(values) {
   return new Set((values || []).map((item) => String(item).toLowerCase()));
+}
+
+function getWorkingDirectory(payload = {}) {
+  return path.resolve(
+    payload.cwd
+    || payload.working_directory
+    || payload.workspace_root
+    || payload.repo_root
+    || payload.project_root
+    || (payload.input && (
+      payload.input.cwd
+      || payload.input.working_directory
+      || payload.input.workspace_root
+      || payload.input.repo_root
+    ))
+    || process.cwd()
+  );
+}
+
+function detectRepoState(payload = {}) {
+  const cwd = getWorkingDirectory(payload);
+  const hasPath = (relativePath) => fs.existsSync(path.join(cwd, relativePath));
+  const hasContractsDir = hasPath('contracts');
+  const hasScriptsDir = hasPath('scripts');
+  const hasPluginManifest = hasPath('.codex-plugin/plugin.json');
+  const hasSkillsDir = hasPath('skills');
+  const hasRunStateDir = hasPath('.cutepower/run');
+  const isCutepowerActiveRepo = (
+    (hasContractsDir && hasScriptsDir && hasPluginManifest)
+    || (hasRunStateDir && (hasContractsDir || hasScriptsDir || hasSkillsDir))
+  );
+
+  return {
+    cwd,
+    has_contracts_dir: hasContractsDir,
+    has_scripts_dir: hasScriptsDir,
+    has_plugin_manifest: hasPluginManifest,
+    has_skills_dir: hasSkillsDir,
+    has_run_state_dir: hasRunStateDir,
+    is_cutepower_active_repo: isCutepowerActiveRepo,
+  };
+}
+
+function shouldTakeOverWithCutepower(payload = {}) {
+  const repoState = detectRepoState(payload);
+  const intent = analyzeCutepowerIntent(payload);
+  const reasons = [];
+
+  if (intent.is_explicit_cutepower_request) {
+    reasons.push('explicit_cutepower_request');
+  }
+  if (repoState.is_cutepower_active_repo && intent.is_repo_governance_task) {
+    reasons.push('repo_local_governance_task');
+  }
+
+  return {
+    should_take_over: reasons.length > 0,
+    repo_state: repoState,
+    intent,
+    reasons,
+  };
+}
+
+function shouldEnforceCutepowerGovernance(payload = {}, hostRuntime) {
+  if (payload.host_runtime && payload.host_runtime.managed_by_cutepower) {
+    return true;
+  }
+  if (payload.runtime_gate && payload.runtime_gate.route_resolution) {
+    return payload.runtime_gate.route_resolution.route_id !== 'declined_general_execution';
+  }
+  return Boolean(hostRuntime && hostRuntime.managed_by_cutepower);
+}
+
+function buildPassThroughResponse({ hookName, payload = {}, hostRuntime, reason, diagnostics = {}, action = 'pass_through' }) {
+  const runtime = hostRuntime || buildHostRuntime(payload);
+  return {
+    decision: 'allow',
+    status: 'pass_through',
+    reason,
+    entry_action: action,
+    action,
+    session: buildSessionView(runtime, payload),
+    diagnostics,
+  };
+}
+
+function buildLegalBlockResponse({ hookName, payload = {}, hostRuntime, reason, runtimeGate = null, diagnostics = {}, action = null }) {
+  const runtime = hostRuntime || buildHostRuntime(payload);
+  return {
+    decision: 'deny',
+    status: runtimeGate ? runtimeGate.status : 'blocked',
+    reason,
+    entry_action: hookName === 'UserPromptSubmit' ? 'legal_block' : null,
+    action,
+    session: buildSessionView(runtime, payload),
+    runtime_gate: runtimeGate,
+    diagnostics,
+  };
 }
 
 function inferActionFromHookPayload(payload, hostRuntime) {
@@ -246,28 +373,73 @@ function inferActionFromHookPayload(payload, hostRuntime) {
 }
 
 function handleUserPromptSubmit(payload) {
+  const takeover = shouldTakeOverWithCutepower(payload);
+  if (!takeover.should_take_over) {
+    return buildPassThroughResponse({
+      hookName: 'UserPromptSubmit',
+      payload,
+      reason: 'non_governance_prompt_passthrough',
+      diagnostics: {
+        mode: 'pass_through',
+        prompt: extractPromptText(payload),
+        repo_state: takeover.repo_state,
+        intent: takeover.intent,
+        matched_conditions: [],
+      },
+    });
+  }
+
   const intake = buildRuntimeGate(payload);
   const hostRuntime = buildHostRuntime({
     ...payload,
     runtime_gate: intake,
   });
   const ready = intake.status === 'ready';
+  const diagnostics = {
+    mode: ready ? 'take_over_for_cutepower' : 'legal_block',
+    prompt: extractPromptText(payload),
+    repo_state: takeover.repo_state,
+    intent: takeover.intent,
+    matched_conditions: takeover.reasons,
+  };
+  if (!ready) {
+    return buildLegalBlockResponse({
+      hookName: 'UserPromptSubmit',
+      payload,
+      hostRuntime,
+      reason: intake.status === 'declined'
+        ? 'cutepower_takeover_requested_but_no_supported_route'
+        : 'cutepower_takeover_blocked_by_runtime_gate',
+      runtimeGate: intake,
+      diagnostics,
+    });
+  }
   return {
-    decision: ready ? 'allow' : 'deny',
-    status: ready ? 'ready' : intake.status,
-    reason: ready ? 'runtime_gate_ready' : 'runtime_gate_not_ready',
-    session: {
-      session_id: hostRuntime.session_id,
-      route_id: hostRuntime.route_id,
-      phase: hostRuntime.phase,
-      capability: hostRuntime.capability,
-    },
+    decision: 'allow',
+    status: 'ready',
+    reason: 'cutepower_takeover_ready',
+    entry_action: 'take_over_for_cutepower',
+    session: buildSessionView(hostRuntime, payload),
     runtime_gate: intake,
+    diagnostics,
   };
 }
 
 function handlePreToolUse(payload) {
   const hostRuntime = coerceHostRuntime(payload);
+  if (!shouldEnforceCutepowerGovernance(payload, hostRuntime)) {
+    return buildPassThroughResponse({
+      hookName: 'PreToolUse',
+      payload,
+      hostRuntime,
+      reason: 'cutepower_governance_not_active_for_session',
+      diagnostics: {
+        mode: 'pass_through',
+        managed_by_cutepower: false,
+        repo_state: detectRepoState(payload),
+      },
+    });
+  }
   const inferred = inferActionFromHookPayload(payload, hostRuntime);
   const gate = gateToolAction({
     action: inferred.action,
@@ -280,11 +452,11 @@ function handlePreToolUse(payload) {
     reason: gate.reason || inferred.reason,
     action: inferred.action,
     command: inferred.command,
-    session: {
-      session_id: hostRuntime.session_id,
-      route_id: hostRuntime.route_id,
-      phase: hostRuntime.phase,
-      capability: hostRuntime.capability,
+    session: buildSessionView(hostRuntime, payload),
+    diagnostics: {
+      mode: 'take_over_for_cutepower',
+      managed_by_cutepower: true,
+      repo_state: detectRepoState(payload),
     },
     guard_result: gate,
   };
@@ -292,6 +464,19 @@ function handlePreToolUse(payload) {
 
 function handleStop(payload) {
   const hostRuntime = coerceHostRuntime(payload);
+  if (!shouldEnforceCutepowerGovernance(payload, hostRuntime)) {
+    return buildPassThroughResponse({
+      hookName: 'Stop',
+      payload,
+      hostRuntime,
+      reason: 'cutepower_governance_not_active_for_session',
+      diagnostics: {
+        mode: 'pass_through',
+        managed_by_cutepower: false,
+        repo_state: detectRepoState(payload),
+      },
+    });
+  }
   const completionGate = evaluateStopGate({
     hostRuntime,
     artifacts: payload.artifacts || payload,
@@ -307,74 +492,96 @@ function handleStop(payload) {
     decision: completionGate.decision,
     status: completionGate.status,
     reason: completionGate.reason,
-    session: {
-      session_id: hostRuntime.session_id,
-      route_id: hostRuntime.route_id,
-      phase: hostRuntime.phase,
-      capability: hostRuntime.capability,
-    },
+    entry_action: 'take_over_for_cutepower',
+    session: buildSessionView(hostRuntime, payload),
     completion_gate: completionGate,
     blocked_terminal_package: blockedArtifacts,
+    diagnostics: {
+      mode: 'take_over_for_cutepower',
+      managed_by_cutepower: true,
+      repo_state: detectRepoState(payload),
+    },
   };
 }
 
-async function main() {
-  const hookName = process.argv[2] || 'Unknown';
-  const stdin = await readStdin();
-  const payload = parseJsonOrDefault(stdin, {});
-
+function runHookHandler(hookName, payload = {}) {
   try {
     if (hookName === 'UserPromptSubmit') {
-      emitHookResponse(hookName, handleUserPromptSubmit(payload));
-      return;
+      return emitHookResponse(hookName, handleUserPromptSubmit(payload));
     }
     if (hookName === 'PreToolUse') {
-      emitHookResponse(hookName, handlePreToolUse(payload));
-      return;
+      return emitHookResponse(hookName, handlePreToolUse(payload));
     }
     if (hookName === 'Stop') {
-      emitHookResponse(hookName, handleStop(payload));
-      return;
+      return emitHookResponse(hookName, handleStop(payload));
     }
-    emitHookResponse(hookName, {
+    return emitHookResponse(hookName, {
       decision: 'deny',
       status: 'denied',
       reason: 'unsupported_hook_event',
-      session: {
-        session_id: payload.session_id || 'unknown-session',
-        route_id: payload.route_id || null,
-        phase: payload.phase || null,
-        capability: null,
+      session: buildSessionView({}, payload),
+      diagnostics: {
+        mode: 'legal_block',
+        matched_conditions: ['unsupported_hook_event'],
       },
     });
   } catch (error) {
-    emitHookResponse(hookName, {
-      decision: 'deny',
-      status: 'error',
-      reason: 'hook_handler_exception',
+    const diagnostics = {
+      mode: hookName === 'UserPromptSubmit' ? 'pass_through' : 'legal_block',
       error: {
         name: error.name,
         message: error.message,
       },
-      session: {
-        session_id: payload.session_id || 'unknown-session',
-        route_id: payload.route_id || null,
-        phase: payload.phase || null,
-        capability: null,
+    };
+    const fallback = hookName === 'UserPromptSubmit'
+      ? buildPassThroughResponse({
+          hookName,
+          payload,
+          reason: 'user_prompt_submit_fail_safe_passthrough',
+          diagnostics,
+        })
+      : buildLegalBlockResponse({
+          hookName,
+          payload,
+        reason: 'hook_handler_exception',
+        diagnostics,
+      });
+    const response = emitHookResponse(hookName, fallback);
+    return {
+      ...response,
+      diagnostics: {
+        ...(response.diagnostics || {}),
+        error: diagnostics.error,
       },
-    });
-    process.exitCode = 1;
+      process_exit_code: 1,
+    };
+  }
+}
+
+async function main() {
+  const hookName = normalizeHookName(process.argv[2] || 'Unknown');
+  const stdin = await readStdin();
+  const payload = parseJsonOrDefault(stdin, {});
+  const response = runHookHandler(hookName, payload);
+  if (response && response.process_exit_code) {
+    process.exitCode = response.process_exit_code;
   }
 }
 
 module.exports = {
   HOOK_SCHEMAS,
+  buildLegalBlockResponse,
+  buildPassThroughResponse,
+  detectRepoState,
   emitHookResponse,
   handlePreToolUse,
   handleStop,
   handleUserPromptSubmit,
   inferActionFromHookPayload,
   parseJsonOrDefault,
+  runHookHandler,
+  shouldEnforceCutepowerGovernance,
+  shouldTakeOverWithCutepower,
   stableStringify,
 };
 

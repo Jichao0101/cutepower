@@ -14,6 +14,7 @@ Important distinction:
   - stages a local plugin copy and writes a marketplace entry so Codex can discover `cutepower` in `/plugins`
 
 After the script finishes, open `/plugins`, search `cutepower`, and choose `Install Plugin`. Re-run the script only when you want to update or replace that staged plugin source.
+The install script also merges the cutepower Codex hook entries into the target `~/.codex/` or repo `.codex/` config, instead of changing the development repository's own hook files.
 
 Current repository note:
 
@@ -30,6 +31,7 @@ Current installed scope:
   - `cute-incident-investigation`
 - static validation uses `scripts/validate-contracts.js`
 - runtime gate verification uses `scripts/test-runtime-gates.js`
+- Codex lifecycle hook verification uses `scripts/test-codex-hooks.js`
 - host runtime injection verification uses `scripts/test-host-runtime.js`
 - default-entry takeover verification uses `scripts/test-task-intake.js`
 - clean plugin acceptance tests should use an isolated vault

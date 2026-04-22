@@ -53,6 +53,20 @@ function detectEngineeringSignal(taskGoal, docs) {
   };
 }
 
+function detectExplicitCutepower(request, docs) {
+  const config = docs["task-normalization"].activation.runtime_entry || {};
+  const text = normalizeText(request.task_goal);
+  const matchedKeywords = (config.explicit_mode_keywords || []).filter((keyword) =>
+    text.includes(String(keyword).toLowerCase())
+  );
+
+  return {
+    requested: request.explicit_cutepower === true || matchedKeywords.length > 0,
+    matched_keywords: matchedKeywords,
+    mode: request.explicit_cutepower === true || matchedKeywords.length > 0 ? "explicit_cutepower" : "default"
+  };
+}
+
 function summarizeContextRequirements(taskProfile, runtimeDiscovery) {
   const requirements = [];
 
@@ -195,11 +209,22 @@ function buildRuntimeGate(taskProfile, routeResolution, blockingGaps, engineerin
 }
 
 function buildExecutionPolicy(runtimeGate, docs) {
+  const runtimeEntry = docs["task-normalization"].activation.runtime_entry || {};
   const protectedSkills = docs["task-normalization"].activation.runtime_entry.protected_execution_skills || [];
   return {
     direct_execution_allowed: runtimeGate.status === "declined",
     direct_execution_reason: runtimeGate.status === "declined" ? "cutepower_declined" : "intake_required_before_execution",
     protected_execution_skills: protectedSkills,
+    runtime_lock: {
+      mode: "explicit_cutepower",
+      pre_intake_allowed_actions: runtimeEntry.pre_intake_allowed_actions || [],
+      protected_actions_before_ready: runtimeEntry.protected_actions_before_ready || [],
+      release_conditions: [
+        "task_profile_resolved",
+        "route_resolution_resolved",
+        "runtime_gate_ready"
+      ]
+    },
     requires_successful_task_profile: true,
     requires_successful_route_resolution: true,
     requires_intake_acceptance_for_handoff: true
@@ -218,6 +243,7 @@ function buildIntakePackage(request, docs = loadContracts()) {
   const route = getRouteById(taskProfile.route_id, docs);
   const runtimeDiscovery = detectRuntimeDiscovery(request.task_goal, docs);
   const engineeringSignal = detectEngineeringSignal(request.task_goal, docs);
+  const explicitCutepower = detectExplicitCutepower(request, docs);
   const routeResolution = buildRouteResolution(taskProfile, route, docs, engineeringSignal);
   const contextRequirements = summarizeContextRequirements(taskProfile, runtimeDiscovery);
   const blockingGaps = buildBlockingGaps(taskProfile, route, request, docs, runtimeDiscovery);
@@ -236,6 +262,7 @@ function buildIntakePackage(request, docs = loadContracts()) {
     blocking_gaps: blockingGaps,
     runtime_discovery: runtimeDiscovery,
     engineering_signal: engineeringSignal,
+    execution_mode: explicitCutepower,
     skill_handoff: runtimeGate.status === "ready" ? buildHandoff(taskProfile, route) : null,
     runtime_gate: runtimeGate,
     execution_policy: executionPolicy

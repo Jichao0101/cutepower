@@ -27,7 +27,8 @@ Route the task into the P0 skill chain without copying governance text.
 - Treat engineering-workflow requests as intake-first even when confidence is low.
 - Prefer the `task-normalization` contract instead of requiring the user to hand-author a full structured prompt.
 - Do not hard-jump to a concrete downstream skill from keywords alone.
-- Do not enter `cute-repo-change`, `cute-board-run`, `cute-code-review`, or `cute-writeback` before a successful `task_profile` plus `route_resolution`.
+- Treat explicit `cutepower` requests as runtime-locked: before `task_profile`, `route_resolution`, and `runtime_gate` are ready, only runtime discovery is allowed.
+- Do not enter `cute-repo-change`, `cute-board-run`, `cute-code-review`, or `cute-writeback` before a successful `task_profile` plus `route_resolution` and a ready `runtime_gate`.
 - If intake returns `declined`, fallback to ordinary direct execution is allowed.
 - If intake returns `blocked`, `clarification_required`, or missing execution context, stop at intake/preflight and surface the gaps instead of silently bypassing cutepower.
 

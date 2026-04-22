@@ -28,16 +28,21 @@ function expectThrows(fn, expectedMessage) {
 
 function main() {
   const bugFix = buildIntakePackage({
-    task_goal: "Fix the startup regression in the repo and update the implementation.",
+    task_goal: "按 cutepower 执行，Fix the startup regression in the repo and update the implementation.",
     cwd,
     authorizations: {
       repo_write: true
     }
   });
   assert(bugFix.intake.status === "accepted", "bug-fix request should be accepted by intake");
+  assert(bugFix.execution_mode.mode === "explicit_cutepower", "explicit cutepower request should enable explicit runtime mode");
   assert(bugFix.route_resolution.route_id === "bug_fix_default", "bug-fix request should resolve the bug-fix route");
   assert(bugFix.skill_handoff.next_skill === "cute-scope-plan", "bug-fix request should hand off to cute-scope-plan first");
   assert(!bugFix.execution_policy.direct_execution_allowed, "accepted bug-fix should not allow direct fallback execution");
+  assert(
+    bugFix.execution_policy.runtime_lock.pre_intake_allowed_actions.includes("runtime_discovery_read"),
+    "explicit runtime lock should only whitelist runtime discovery before ready"
+  );
 
   const incident = buildIntakePackage({
     task_goal: "Investigate the crash logs and triage the incident before deciding whether code changes are needed.",
@@ -76,7 +81,7 @@ function main() {
   );
 
   const blockedBoard = buildIntakePackage({
-    task_goal: "Fix the board crash on device and validate the logs on board.",
+    task_goal: "按 cutepower 执行，Fix the board crash on device and validate the logs on board.",
     cwd,
     authorizations: {
       repo_write: true
@@ -105,10 +110,11 @@ function main() {
   assert(lowConfidenceEngineering.skill_handoff === null, "clarification-required intake must not hand off to execution skills");
 
   const runtimeDiscovery = buildIntakePackage({
-    task_goal: "Check the Codex plugin runtime hook and marketplace entry under .codex and .agents before changing anything.",
+    task_goal: "按 cutepower 执行，Check the Codex plugin runtime hook and marketplace entry under .codex and .agents before changing anything.",
     cwd
   });
   assert(runtimeDiscovery.runtime_discovery.requested, "runtime discovery request should be detected");
+  assert(runtimeDiscovery.execution_mode.requested, "runtime discovery request with cutepower wording should still be explicit mode");
   assert(
     !runtimeDiscovery.blocking_gaps.some((gap) => gap.gap_id === "knowledge_read_authorization"),
     "runtime discovery should not be treated as knowledge-base authorization"
@@ -139,7 +145,7 @@ function main() {
   assert(!repoAuthGap.execution_policy.direct_execution_allowed, "blocked repo task should not silently fallback");
 
   const explicitDecline = buildIntakePackage({
-    task_goal: "Summarize this conversation style and help me write a short reply.",
+    task_goal: "按 cutepower 执行，Summarize this conversation style and help me write a short reply.",
     cwd
   });
   assert(explicitDecline.runtime_gate.status === "declined", "non-engineering request should decline cutepower intake");

@@ -7,6 +7,8 @@
     "writeback"
   ],
   "actions": [
+    "business_context_read",
+    "runtime_discovery_read",
     "repo_write",
     "verification_write",
     "verification_read",
@@ -62,6 +64,8 @@
     {
       "state": "analysis",
       "allow": [
+        "business_context_read",
+        "runtime_discovery_read",
         "project_log_write",
         "verification_read",
         "board_execute",
@@ -77,6 +81,8 @@
     {
       "state": "implementation",
       "allow": [
+        "business_context_read",
+        "runtime_discovery_read",
         "repo_write",
         "verification_write",
         "verification_read",
@@ -92,6 +98,8 @@
     {
       "state": "review",
       "allow": [
+        "business_context_read",
+        "runtime_discovery_read",
         "review_decision",
         "verification_read",
         "artifact_collect",
@@ -111,6 +119,8 @@
         "project_current_update"
       ],
       "deny": [
+        "business_context_read",
+        "runtime_discovery_read",
         "repo_write",
         "verification_write",
         "review_decision",

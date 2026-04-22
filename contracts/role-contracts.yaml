@@ -11,8 +11,10 @@
     {
       "role_id": "workflow-orchestrator",
       "allowed_actions": [
+        "runtime_discovery_read",
         "verification_read",
-        "project_log_write"
+        "project_log_write",
+        "project_current_update"
       ],
       "required_inputs": [
         "task_goal",
@@ -34,6 +36,8 @@
     {
       "role_id": "scope-planner",
       "allowed_actions": [
+        "business_context_read",
+        "runtime_discovery_read",
         "verification_read",
         "project_log_write"
       ],
@@ -53,6 +57,8 @@
     {
       "role_id": "repo-coder",
       "allowed_actions": [
+        "business_context_read",
+        "runtime_discovery_read",
         "repo_write",
         "verification_write",
         "verification_read",
@@ -74,6 +80,8 @@
     {
       "role_id": "repo-reviewer",
       "allowed_actions": [
+        "business_context_read",
+        "runtime_discovery_read",
         "review_decision",
         "verification_read",
         "artifact_collect",
@@ -102,6 +110,8 @@
     {
       "role_id": "functional-reviewer",
       "allowed_actions": [
+        "business_context_read",
+        "runtime_discovery_read",
         "review_decision",
         "verification_read",
         "artifact_collect",
@@ -130,6 +140,7 @@
     {
       "role_id": "board-operator",
       "allowed_actions": [
+        "runtime_discovery_read",
         "board_execute",
         "artifact_collect",
         "verification_read",
@@ -160,6 +171,8 @@
     {
       "role_id": "incident-investigator",
       "allowed_actions": [
+        "business_context_read",
+        "runtime_discovery_read",
         "verification_read",
         "board_execute",
         "artifact_collect",

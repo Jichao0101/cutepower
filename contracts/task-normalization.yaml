@@ -52,6 +52,25 @@
       "route_resolution_output": "route_resolution",
       "blocking_gaps_output": "blocking_gaps",
       "runtime_gate_output": "runtime_gate",
+      "explicit_mode_keywords": [
+        "cutepower",
+        "按 cutepower",
+        "严格按 cutepower",
+        "using cutepower"
+      ],
+      "pre_intake_allowed_actions": [
+        "runtime_discovery_read"
+      ],
+      "protected_actions_before_ready": [
+        "business_context_read",
+        "repo_write",
+        "verification_write",
+        "board_execute",
+        "artifact_collect",
+        "review_decision",
+        "project_log_write",
+        "project_current_update"
+      ],
       "protected_execution_skills": [
         "cute-repo-change",
         "cute-board-run",

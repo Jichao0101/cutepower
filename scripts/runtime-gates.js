@@ -31,6 +31,16 @@ function ensureArray(name, value) {
   }
 }
 
+function ensureObject(name, value) {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    throw gateError(`${name} must be an object`);
+  }
+}
+
+function getRuntimeEntry(docs) {
+  return docs["task-normalization"]?.activation?.runtime_entry || {};
+}
+
 function getRouteSegment(route, skillId, roleId) {
   const mainSkills = [route.entry_skill, ...(route.skill_chain || [])];
   if (mainSkills.includes(skillId) && (route.required_roles || []).includes(roleId)) {
@@ -85,6 +95,56 @@ function assertStateAllowsActions(state, requestedActions, docs) {
     }
   }
   return rule;
+}
+
+function assertExplicitCutepowerRuntimeLock(request, docs) {
+  const runtimeEntry = getRuntimeEntry(docs);
+  const mode = request.execution_mode || "default";
+  if (mode !== "explicit_cutepower") {
+    return;
+  }
+
+  const intakeStatus = request.intake_status || null;
+  const routeStatus = request.route_status || null;
+  const runtimeGateStatus = request.runtime_gate_status || null;
+  const fallbackAllowed = request.fallback_allowed === true;
+  const requestedActions = Array.isArray(request.requested_actions) ? request.requested_actions : [];
+  const allowedPreIntakeActions = new Set(runtimeEntry.pre_intake_allowed_actions || []);
+  const protectedBeforeReady = new Set(runtimeEntry.protected_actions_before_ready || []);
+  const protectedSkills = new Set(runtimeEntry.protected_execution_skills || []);
+
+  if (runtimeGateStatus === "declined" && fallbackAllowed) {
+    return;
+  }
+
+  const runtimeReady =
+    intakeStatus === "accepted" &&
+    routeStatus === "resolved" &&
+    runtimeGateStatus === "ready";
+
+  if (runtimeReady) {
+    return;
+  }
+
+  for (const action of requestedActions) {
+    if (!allowedPreIntakeActions.has(action) || protectedBeforeReady.has(action)) {
+      throw gateError(`explicit cutepower mode requires intake/route/gate before action ${action}`, {
+        action,
+        intake_status: intakeStatus,
+        route_status: routeStatus,
+        runtime_gate_status: runtimeGateStatus
+      });
+    }
+  }
+
+  if (request.skill_id && protectedSkills.has(request.skill_id)) {
+    throw gateError(`explicit cutepower mode requires intake/route/gate before skill ${request.skill_id}`, {
+      skill_id: request.skill_id,
+      intake_status: intakeStatus,
+      route_status: routeStatus,
+      runtime_gate_status: runtimeGateStatus
+    });
+  }
 }
 
 function assertRoleAllowsActions(role, requestedActions) {
@@ -153,9 +213,140 @@ function assertBoardRouteConstraints(request, route, docs) {
   }
 }
 
+function assertRuntimeDiscoveryInvocation(request, role) {
+  const actions = request.requested_actions || [];
+  const runtimeDiscoveryOnly = actions.length > 0 && actions.every((action) => action === "runtime_discovery_read");
+  if (!runtimeDiscoveryOnly) {
+    return false;
+  }
+
+  if (request.skill_id !== "using-cutepower") {
+    throw gateError("runtime discovery reads must run through using-cutepower", {
+      skill_id: request.skill_id
+    });
+  }
+
+  assertRoleAllowsActions(role, actions);
+  return true;
+}
+
+function assertIndependentReview(request, reviewType) {
+  const independence = reviewType.independence_requirements || {};
+  ensureArray("evidence_keys", request.evidence_keys);
+
+  if (independence.require_explicit_reviewer_identity) {
+    if (!request.reviewer_stage_id && !request.reviewer_instance_id) {
+      throw gateError("review requires explicit reviewer stage or instance identity");
+    }
+  }
+
+  if (independence.separate_reviewer_stage_or_instance) {
+    const sameStage =
+      request.author_stage_id != null &&
+      request.reviewer_stage_id != null &&
+      request.author_stage_id === request.reviewer_stage_id;
+    const sameInstance =
+      request.author_instance_id != null &&
+      request.reviewer_instance_id != null &&
+      request.author_instance_id === request.reviewer_instance_id;
+
+    if (sameStage && sameInstance) {
+      throw gateError("review requires a separate reviewer stage or instance", {
+        author_stage_id: request.author_stage_id,
+        reviewer_stage_id: request.reviewer_stage_id,
+        author_instance_id: request.author_instance_id,
+        reviewer_instance_id: request.reviewer_instance_id
+      });
+    }
+
+    if (!request.reviewer_stage_id && !request.reviewer_instance_id) {
+      throw gateError("review requires a separate reviewer stage or instance");
+    }
+  }
+
+  if (independence.author_self_review_forbidden) {
+    if (
+      request.author_instance_id != null &&
+      request.reviewer_instance_id != null &&
+      request.author_instance_id === request.reviewer_instance_id
+    ) {
+      throw gateError("author self-review cannot satisfy independent review", {
+        author_instance_id: request.author_instance_id,
+        reviewer_instance_id: request.reviewer_instance_id
+      });
+    }
+  }
+
+  if (independence.allow_full_author_context === false && request.inherit_full_author_context === true) {
+    throw gateError("review may not inherit full author context");
+  }
+
+  if (independence.allow_full_author_reasoning === false && request.inherit_full_author_reasoning === true) {
+    throw gateError("review may not inherit full author reasoning");
+  }
+
+  if (independence.use_minimum_evidence_package) {
+    const evidence = new Set(request.evidence_keys);
+    for (const field of reviewType.minimum_evidence_package || []) {
+      if (!evidence.has(field)) {
+        throw gateError(`review missing minimum evidence field ${field}`, {
+          missing_field: field
+        });
+      }
+    }
+  }
+}
+
+function assertWritebackPreconditions(request, matrixEntry, docs) {
+  ensureArray("completed_preconditions", request.completed_preconditions);
+  const levels = docs["writeback-levels"].levels || [];
+  const level = levels.find((entry) => entry.level_id === request.writeback_level);
+  if (!level) {
+    throw gateError(`unknown writeback level: ${request.writeback_level}`);
+  }
+
+  const role = assertKnownRole(request.actor_role_id, docs);
+  assertRoleAllowsActions(role, [request.writeback_level]);
+
+  const completed = new Set(request.completed_preconditions);
+  const requiredPreconditions = new Set([...(level.required_preconditions || []), ...(matrixEntry.required_preconditions || [])]);
+  for (const precondition of requiredPreconditions) {
+    if (!completed.has(precondition)) {
+      throw gateError(`missing required writeback precondition ${precondition}`, {
+        route_id: request.route_id,
+        scenario: request.scenario,
+        writeback_level: request.writeback_level
+      });
+    }
+  }
+
+  if (request.writeback_level === "project_current_update") {
+    ensureObject("adjudication", request.adjudication);
+
+    if (!request.adjudication.adjudicator_instance_id) {
+      throw gateError("project_current_update requires adjudicator_instance_id");
+    }
+    if (
+      request.author_instance_id != null &&
+      request.adjudication.adjudicator_instance_id === request.author_instance_id
+    ) {
+      throw gateError("project_current_update requires non-author adjudication", {
+        author_instance_id: request.author_instance_id,
+        adjudicator_instance_id: request.adjudication.adjudicator_instance_id
+      });
+    }
+  }
+}
+
 function evaluateSkillInvocation(request, docs) {
   ensureArray("requested_actions", request.requested_actions);
   const role = assertKnownRole(request.role_id, docs);
+  if (assertRuntimeDiscoveryInvocation(request, role)) {
+    return {
+      ok: true,
+      request_type: request.request_type
+    };
+  }
   const { route } = assertRouteSkillRoleBinding(request, docs);
   assertRoleAllowsActions(role, request.requested_actions);
   assertStateAllowsActions(request.state, request.requested_actions, docs);
@@ -201,6 +392,7 @@ function evaluateReviewDecision(request, docs) {
   if (!request.requested_actions.includes("review_decision")) {
     throw gateError("review_decision request must include review_decision action");
   }
+  assertIndependentReview(request, reviewType);
 
   return {
     ok: true,
@@ -210,6 +402,9 @@ function evaluateReviewDecision(request, docs) {
 
 function evaluateWriteback(request, docs) {
   ensureArray("pass_statuses", request.pass_statuses);
+  if (request.actor_role_id == null) {
+    throw gateError("writeback request requires actor_role_id");
+  }
   if (request.route_id == null || request.scenario == null || request.writeback_level == null || request.approval_gate == null) {
     throw gateError("writeback request requires route_id, scenario, approval_gate, and writeback_level");
   }
@@ -256,6 +451,7 @@ function evaluateWriteback(request, docs) {
       });
     }
   }
+  assertWritebackPreconditions(request, matrixEntry, docs);
 
   return {
     ok: true,
@@ -267,6 +463,8 @@ function evaluateRuntimeRequest(request, docs = loadContracts()) {
   if (!request || typeof request !== "object") {
     throw gateError("request must be an object");
   }
+
+  assertExplicitCutepowerRuntimeLock(request, docs);
 
   switch (request.request_type) {
     case "skill_invocation":

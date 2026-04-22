@@ -33,7 +33,8 @@
       ],
       "required_preconditions": [
         "writeback_state_reached",
-        "route_writeback_requirements_satisfied"
+        "route_writeback_requirements_satisfied",
+        "independent_writeback_adjudication"
       ],
       "forbidden_targets": [
         "external_truth_store"
@@ -49,7 +50,10 @@
       ],
       "required_gate": "review",
       "allowed_writeback_level": "project_current_update",
-      "required_preconditions": []
+      "required_preconditions": [
+        "review_pass_recorded",
+        "independent_writeback_adjudication"
+      ]
     },
     {
       "route_id": "implementation_board_validation",
@@ -60,7 +64,9 @@
       "required_gate": "review",
       "allowed_writeback_level": "project_current_update",
       "required_preconditions": [
-        "board_evidence_recorded_when_required"
+        "board_evidence_recorded_when_required",
+        "review_pass_recorded",
+        "independent_writeback_adjudication"
       ]
     },
     {
@@ -71,7 +77,10 @@
       ],
       "required_gate": "review",
       "allowed_writeback_level": "project_current_update",
-      "required_preconditions": []
+      "required_preconditions": [
+        "review_pass_recorded",
+        "independent_writeback_adjudication"
+      ]
     },
     {
       "route_id": "bug_fix_board_validation",
@@ -82,7 +91,9 @@
       "required_gate": "review",
       "allowed_writeback_level": "project_current_update",
       "required_preconditions": [
-        "board_evidence_recorded_when_required"
+        "board_evidence_recorded_when_required",
+        "review_pass_recorded",
+        "independent_writeback_adjudication"
       ]
     },
     {
@@ -93,7 +104,10 @@
       ],
       "required_gate": "review",
       "allowed_writeback_level": "project_current_update",
-      "required_preconditions": []
+      "required_preconditions": [
+        "review_pass_recorded",
+        "independent_writeback_adjudication"
+      ]
     },
     {
       "route_id": "audit_functional_board",
@@ -104,7 +118,9 @@
       "required_gate": "review",
       "allowed_writeback_level": "project_current_update",
       "required_preconditions": [
-        "board_evidence_recorded_when_required"
+        "board_evidence_recorded_when_required",
+        "review_pass_recorded",
+        "independent_writeback_adjudication"
       ]
     },
     {

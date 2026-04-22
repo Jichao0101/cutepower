@@ -2,3 +2,7 @@ interface:
   display_name: "cutepower"
   short_description: "Route engineering tasks through cutepower intake before repo, review, board, or writeback work starts"
   default_prompt: "Send engineering requests to cutepower intake first; only explicit decline may fall back."
+runtime:
+  session_context_hook: "scripts/host-runtime.js"
+  entry_skill: "using-cutepower"
+  explicit_mode_warning: "When cutepower explicit mode is active, inject the cutepower warning summary and require intake/preflight before business reads or execution."

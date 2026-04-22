@@ -27,5 +27,14 @@
       "Write"
     ],
     "defaultPrompt": "Run engineering requests through cutepower intake first; only fall back when intake explicitly declines."
+  },
+  "runtime": {
+    "sessionContextHook": {
+      "script": "scripts/host-runtime.js",
+      "entrySkill": "using-cutepower",
+      "mode": "explicit_cutepower",
+      "injectOnExplicitRequests": true,
+      "warningPolicy": "block_execution_until_preflight_ready"
+    }
   }
 }

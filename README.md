@@ -48,7 +48,6 @@ Current scope:
 Current non-goals:
 
 - P2 skills
-- complex hooks
 - automatic remediation
 
 Installed-plugin boundaries:
@@ -58,7 +57,8 @@ Installed-plugin boundaries:
 - `AGENTS.md` is a thin runtime bridge with hard stops
 - `agents/*.toml` is a compatibility bridge, not a policy source
 - `scripts/validate-contracts.js` provides static contract validation
-- `scripts/runtime-gates.js` provides a minimal runtime gate evaluator for route, role, review, and writeback requests
+- `scripts/host-runtime.js` provides the host-side explicit-mode session-context injection package and action-guard bridge
+- `scripts/runtime-gates.js` provides action-front runtime admission checks for route, role, review, and writeback requests
 - `scripts/task-profile.js` provides natural-language task normalization into a routed task profile
 - `scripts/task-intake.js` provides the default-entry intake/preflight layer for route resolution, blocking gaps, runtime discovery, and skill handoff
 - `scripts/test-runtime-gates.js` provides positive and negative gate checks
@@ -82,6 +82,7 @@ Validation entries:
 
 ```bash
 node scripts/test-install-plugin.js
+node scripts/test-host-runtime.js
 node scripts/validate-contracts.js
 node scripts/test-runtime-gates.js
 node scripts/test-task-profile.js

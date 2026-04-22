@@ -30,6 +30,7 @@ Current installed scope:
   - `cute-incident-investigation`
 - static validation uses `scripts/validate-contracts.js`
 - runtime gate verification uses `scripts/test-runtime-gates.js`
+- host runtime injection verification uses `scripts/test-host-runtime.js`
 - default-entry takeover verification uses `scripts/test-task-intake.js`
 - clean plugin acceptance tests should use an isolated vault
 

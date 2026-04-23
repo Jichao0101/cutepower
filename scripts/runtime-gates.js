@@ -6,6 +6,11 @@ const path = require('path');
 const { artifactPath } = require('./run-artifacts');
 const { buildGovernanceVerdict } = require('./hook-response');
 const { validateSessionCapability } = require('./host-runtime');
+const {
+  FUNCTIONAL_REVIEW_REQUIRED_ARTIFACTS,
+  isFunctionalReviewSession,
+  validateFunctionalReviewArtifacts,
+} = require('./review-artifacts');
 
 const DEFAULT_REQUIRED_PREFLIGHT = Object.freeze([
   'task_profile',
@@ -18,11 +23,15 @@ function includesAction(hostRuntime, action) {
     && hostRuntime.allowed_actions.includes(action);
 }
 
-function pathAllowed(hostRuntime, command) {
-  return (hostRuntime.allowed_paths || []).some((allowedPath) => command.includes(allowedPath));
+function pathAllowed(hostRuntime, command, targetPaths = []) {
+  const allowedPaths = hostRuntime.allowed_paths || [];
+  if (allowedPaths.some((allowedPath) => command.includes(allowedPath))) {
+    return true;
+  }
+  return targetPaths.some((targetPath) => allowedPaths.some((allowedPath) => String(targetPath).includes(allowedPath)));
 }
 
-function gateToolAction({ action, hostRuntime, command }) {
+function gateToolAction({ action, hostRuntime, command, targetPaths = [] }) {
   if (action === 'runtime_discovery_read') {
     return {
       gate_result: 'ready',
@@ -82,7 +91,7 @@ function gateToolAction({ action, hostRuntime, command }) {
         reason: 'authorized_business_context_read_requires_read_only_evidence_collection_mode',
       };
     }
-    if (!pathAllowed(hostRuntime, command)) {
+    if (!pathAllowed(hostRuntime, command, targetPaths)) {
       return {
         gate_result: 'blocked',
         reason: 'authorized_business_context_read_outside_allowed_paths',
@@ -109,17 +118,70 @@ function artifactStatus(value) {
 
 function buildBlockedTerminalArtifacts({ sessionId, routeId, blockedReason }) {
   return {
+    requirements_package: {
+      requirements: [
+        {
+          requirement_id: 'BLOCKED-REVIEW',
+          requirement_text: 'Review may close only as blocked.',
+          requirement_type: 'functional',
+          severity: 'high',
+          source_path: 'runtime',
+        },
+      ],
+    },
+    acceptance_items: {
+      acceptance_items: [
+        {
+          acceptance_item_id: 'BLOCKED-ACC-1',
+          mapped_requirement_ids: ['BLOCKED-REVIEW'],
+          pass_criteria: 'Blocked state is explicitly recorded.',
+          expected_evidence_types: ['blocked_terminal_record'],
+        },
+      ],
+    },
+    evidence_plan: {
+      allowed_paths: ['runtime'],
+      planned_evidence_sources: ['runtime'],
+    },
+    relevant_context: {
+      allowed_paths: ['runtime'],
+      core_paths: ['runtime'],
+    },
     evidence_manifest: {
       session_id: sessionId,
       route_id: routeId,
       status: 'blocked',
       reason: blockedReason,
+      evidence: [],
     },
     review_decision: {
       session_id: sessionId,
       route_id: routeId,
       decision: 'blocked',
+      blocked_by: [blockedReason],
+      allows_completed: false,
       reason: blockedReason,
+    },
+    evidence_gaps: {
+      gaps: [
+        {
+          requirement_id: 'BLOCKED-REVIEW',
+          acceptance_item_id: 'BLOCKED-ACC-1',
+          reason: 'acceptance_item_missing_evidence_coverage',
+          blocker: true,
+        },
+      ],
+    },
+    compliance_matrix: {
+      rows: [
+        {
+          requirement_id: 'BLOCKED-REVIEW',
+          acceptance_item_ids: ['BLOCKED-ACC-1'],
+          evidence_ids: [],
+          status: 'gap',
+          notes: blockedReason,
+        },
+      ],
     },
     writeback_declined: {
       session_id: sessionId,
@@ -164,13 +226,229 @@ function lowerCaseSet(values) {
 }
 
 function inferToolAction(payload, hostRuntime) {
+  const metadataInference = inferToolActionFromMetadata(payload, hostRuntime);
+  if (metadataInference) {
+    return metadataInference;
+  }
+  return inferToolActionFromCommand(payload, hostRuntime);
+}
+
+function extractToolMetadata(payload = {}) {
+  const metadata = payload.tool_metadata || payload.metadata || payload.tool || payload.event_metadata || {};
+  const toolInput = payload.tool_input && typeof payload.tool_input === 'object' ? payload.tool_input : {};
+  const input = payload.input && typeof payload.input === 'object' ? payload.input : {};
+  const sources = [payload, metadata, toolInput, input];
+  const first = (...keys) => {
+    for (const source of sources) {
+      if (!source || typeof source !== 'object') {
+        continue;
+      }
+      for (const key of keys) {
+        if (Object.prototype.hasOwnProperty.call(source, key) && source[key] != null) {
+          return source[key];
+        }
+      }
+    }
+    return null;
+  };
+
+  const targetPaths = [];
+  for (const value of [
+    first('target_paths', 'paths'),
+    first('target_path', 'path', 'file'),
+  ]) {
+    if (Array.isArray(value)) {
+      targetPaths.push(...value.map((item) => String(item)));
+    } else if (typeof value === 'string') {
+      targetPaths.push(value);
+    }
+  }
+
+  const structured = {
+    tool_name: first('tool_name', 'tool', 'name', 'event_name', 'hook_event'),
+    operation_class: first('operation_class', 'op_class', 'operation'),
+    intent: first('intent', 'read_write_intent', 'access_intent'),
+    command_type: first('command_type', 'tool_kind'),
+    is_mutating: first('is_mutating'),
+    is_external_exec: first('is_external_exec'),
+    is_network_like: first('is_network_like'),
+    privilege_level: first('privilege_level'),
+    target_paths: targetPaths,
+    command: getCommand(payload).trim(),
+  };
+
+  const hasMetadata = Object.values(structured).some((value) => {
+    return false;
+  });
+  const hasStructuredMetadata = [
+    structured.tool_name,
+    structured.operation_class,
+    structured.intent,
+    structured.command_type,
+    structured.is_mutating,
+    structured.is_external_exec,
+    structured.is_network_like,
+    structured.privilege_level,
+  ].some((value) => value != null && value !== '')
+    || structured.target_paths.length > 0;
+
+  return hasStructuredMetadata ? structured : null;
+}
+
+function inferToolActionFromMetadata(payload, hostRuntime) {
+  const metadata = extractToolMetadata(payload);
+  if (!metadata) {
+    return null;
+  }
+
+  const allowedActions = new Set((hostRuntime.allowed_actions || []).map((item) => String(item)));
+  const allowedPaths = (hostRuntime.allowed_paths || []).map((item) => String(item));
+  const readOnlyTools = lowerCaseSet(['read', 'open', 'view', 'grep', 'glob', 'search', 'list']);
+  const toolName = String(metadata.tool_name || '').toLowerCase();
+  const operationClass = String(metadata.operation_class || '').toLowerCase();
+  const intent = String(metadata.intent || '').toLowerCase();
+  const commandType = String(metadata.command_type || '').toLowerCase();
+  const normalizedTargets = metadata.target_paths.map((item) => String(item));
+  const touchesAllowedPaths = normalizedTargets.length === 0
+    ? false
+    : normalizedTargets.some((targetPath) => allowedPaths.some((allowedPath) => targetPath.includes(allowedPath)));
+  const touchesBusinessContext = normalizedTargets.some((targetPath) => /contracts\/|README|AGENTS|docs\/|scripts\//.test(targetPath));
+
+  if (metadata.is_network_like === true) {
+    return {
+      action: 'unmapped_tool_event',
+      reason: 'metadata_network_like_operation_denied',
+      command: metadata.command,
+      risk_level: 'high',
+      inference_source: 'metadata',
+      inference_basis: {
+        is_network_like: true,
+      },
+      uncertainty: 'low',
+    };
+  }
+
+  if (
+    metadata.is_mutating === true
+    || ['write', 'edit', 'delete', 'patch', 'mutate'].includes(intent)
+    || ['write', 'edit', 'delete', 'patch'].includes(operationClass)
+    || ['applypatch', 'edit', 'write'].includes(toolName)
+  ) {
+    return {
+      action: 'unmapped_tool_event',
+      reason: 'metadata_mutating_operation_denied',
+      command: metadata.command,
+      risk_level: 'high',
+      inference_source: 'metadata',
+      inference_basis: {
+        tool_name: metadata.tool_name,
+        operation_class: metadata.operation_class,
+        intent: metadata.intent,
+        is_mutating: metadata.is_mutating,
+      },
+      uncertainty: 'low',
+    };
+  }
+
+  if (metadata.is_external_exec === true || operationClass === 'exec' || commandType === 'exec') {
+    const command = metadata.command;
+    const isRepoLocalRegressionTest = /^node\s+scripts\/test-[\w-]+\.js(?:\s|$)/.test(command);
+    return {
+      action: isRepoLocalRegressionTest ? 'repo_local_verification_exec' : 'unmapped_tool_event',
+      reason: isRepoLocalRegressionTest
+        ? 'metadata_external_exec_matches_repo_local_verification'
+        : 'metadata_external_exec_denied',
+      command,
+      target_paths: normalizedTargets,
+      risk_level: 'high',
+      inference_source: 'metadata',
+      inference_basis: {
+        is_external_exec: metadata.is_external_exec,
+        command_type: metadata.command_type,
+        operation_class: metadata.operation_class,
+      },
+      uncertainty: command ? 'low' : 'medium',
+    };
+  }
+
+  if (
+    intent === 'read'
+    || operationClass === 'read'
+    || readOnlyTools.has(toolName)
+  ) {
+    if (!touchesBusinessContext) {
+      return {
+        action: 'runtime_discovery_read',
+        reason: 'metadata_read_only_runtime_discovery',
+        command: metadata.command,
+        target_paths: normalizedTargets,
+        risk_level: 'low',
+        inference_source: 'metadata',
+        inference_basis: {
+          tool_name: metadata.tool_name,
+          target_paths: metadata.target_paths,
+        },
+        uncertainty: normalizedTargets.length === 0 ? 'medium' : 'low',
+      };
+    }
+    if (
+      hostRuntime.evidence_collection_mode === 'read_only'
+      && touchesAllowedPaths
+      && allowedActions.has('authorized_business_context_read')
+    ) {
+      return {
+        action: 'authorized_business_context_read',
+        reason: 'metadata_business_context_read_authorized',
+        command: metadata.command,
+        target_paths: normalizedTargets,
+        risk_level: 'low',
+        inference_source: 'metadata',
+        inference_basis: {
+          target_paths: metadata.target_paths,
+          allowed_paths: allowedPaths,
+        },
+        uncertainty: 'low',
+      };
+    }
+    return {
+      action: 'forbidden_business_context_read',
+      reason: 'metadata_business_context_read_outside_allowed_paths',
+      command: metadata.command,
+      target_paths: normalizedTargets,
+      risk_level: 'low',
+      inference_source: 'metadata',
+      inference_basis: {
+        target_paths: metadata.target_paths,
+        allowed_paths: allowedPaths,
+      },
+      uncertainty: 'low',
+    };
+  }
+
+  return {
+    action: 'unmapped_tool_event',
+    reason: 'metadata_present_but_unclassified',
+    command: metadata.command,
+    target_paths: normalizedTargets,
+    risk_level: 'high',
+    inference_source: 'metadata',
+    inference_basis: metadata,
+    uncertainty: 'medium',
+  };
+}
+
+function inferToolActionFromCommand(payload, hostRuntime) {
   const command = getCommand(payload).trim();
   if (!command) {
     return {
       action: 'runtime_discovery_read',
       reason: 'empty_command_treated_as_runtime_discovery',
       command,
+      target_paths: [],
       risk_level: 'low',
+      inference_source: 'command_fallback',
+      inference_basis: { command: '' },
+      uncertainty: 'low',
     };
   }
 
@@ -219,7 +497,11 @@ function inferToolAction(payload, hostRuntime) {
       action: 'runtime_discovery_read',
       reason: 'pwd_is_runtime_discovery',
       command,
+      target_paths: [],
       risk_level: 'low',
+      inference_source: 'command_fallback',
+      inference_basis: { verb },
+      uncertainty: 'low',
     };
   }
 
@@ -233,14 +515,22 @@ function inferToolAction(payload, hostRuntime) {
           ? 'git_read_within_allowed_paths'
           : 'git_read_targets_business_context_without_authorization',
         command,
+        target_paths: [],
         risk_level: 'low',
+        inference_source: 'command_fallback',
+        inference_basis: { verb, commandTargetsAllowedPath },
+        uncertainty: 'medium',
       };
     }
     return {
       action: 'unmapped_tool_event',
       reason: 'git_mutation_or_unknown_git_command',
       command,
+      target_paths: [],
       risk_level: 'high',
+      inference_source: 'command_fallback',
+      inference_basis: { verb },
+      uncertainty: 'medium',
     };
   }
 
@@ -250,7 +540,11 @@ function inferToolAction(payload, hostRuntime) {
         action: 'runtime_discovery_read',
         reason: 'read_only_command_without_business_context_target',
         command,
+        target_paths: [],
         risk_level: 'low',
+        inference_source: 'command_fallback',
+        inference_basis: { verb },
+        uncertainty: 'medium',
       };
     }
     if (
@@ -262,14 +556,22 @@ function inferToolAction(payload, hostRuntime) {
         action: 'authorized_business_context_read',
         reason: 'read_only_audit_evidence_collection_authorized',
         command,
+        target_paths: [],
         risk_level: 'low',
+        inference_source: 'command_fallback',
+        inference_basis: { verb, commandTargetsAllowedPath },
+        uncertainty: 'medium',
       };
     }
     return {
       action: 'forbidden_business_context_read',
       reason: 'business_context_read_missing_explicit_authorization_or_route',
       command,
+      target_paths: [],
       risk_level: 'low',
+      inference_source: 'command_fallback',
+      inference_basis: { verb, commandTargetsAllowedPath },
+      uncertainty: 'medium',
     };
   }
 
@@ -278,7 +580,11 @@ function inferToolAction(payload, hostRuntime) {
       action: 'repo_local_verification_exec',
       reason: 'repo_local_regression_test_allowed_for_verification',
       command,
+      target_paths: [],
       risk_level: 'high',
+      inference_source: 'command_fallback',
+      inference_basis: { verb, isRepoLocalRegressionTest },
+      uncertainty: 'low',
     };
   }
 
@@ -287,7 +593,11 @@ function inferToolAction(payload, hostRuntime) {
       action: 'unmapped_tool_event',
       reason: 'mutating_or_unreviewed_command_denied_in_hook_layer',
       command,
+      target_paths: [],
       risk_level: 'high',
+      inference_source: 'command_fallback',
+      inference_basis: { verb },
+      uncertainty: 'medium',
     };
   }
 
@@ -295,7 +605,11 @@ function inferToolAction(payload, hostRuntime) {
     action: 'unmapped_tool_event',
     reason: 'unmapped_tool_event',
     command,
+    target_paths: [],
     risk_level: 'high',
+    inference_source: 'command_fallback',
+    inference_basis: { verb },
+    uncertainty: 'high',
   };
 }
 
@@ -499,6 +813,7 @@ function evaluateToolUseVerdict({ payload = {}, hostRuntime }) {
     action: inferred.action,
     hostRuntime,
     command: inferred.command,
+    targetPaths: inferred.target_paths || [],
   });
   return buildGovernanceVerdict('pre_tool_use', {
     gate_result: gate.gate_result,
@@ -569,6 +884,28 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
     ...preflight.missing_artifacts,
     ...closure.missing_artifacts,
   ];
+  const functionalReviewActive = isFunctionalReviewSession(hostRuntime, {
+    ...artifacts,
+    task_profile: preflight.artifacts.task_profile,
+  });
+  let reviewValidation = null;
+
+  if (functionalReviewActive) {
+    const functionalReviewState = collectArtifactState({
+      hostRuntime,
+      artifacts,
+      requiredArtifacts: FUNCTIONAL_REVIEW_REQUIRED_ARTIFACTS,
+    });
+    missingArtifacts.push(...functionalReviewState.missing_artifacts);
+    reviewValidation = validateFunctionalReviewArtifacts(functionalReviewState.artifacts);
+    if (reviewValidation.required_artifacts.length > 0) {
+      for (const artifactName of functionalReviewState.missing_artifacts) {
+        if (!missingArtifacts.includes(artifactName)) {
+          missingArtifacts.push(artifactName);
+        }
+      }
+    }
+  }
 
   if (
     preflight.missing_artifacts.length === 0
@@ -576,6 +913,15 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
     && reviewStatus === 'blocked'
     && hasWritebackDeclined
     && terminalPhase === 'blocked_closed'
+    && (!functionalReviewActive || (
+      reviewValidation
+      && reviewValidation.completion_ready === false
+      && reviewValidation.coverage_summary.blocker_gaps > 0
+      && reviewValidation.missing_declared_gaps.length === 0
+      && reviewValidation.compliance_issues.length === 0
+      && reviewValidation.decision_issues.length === 0
+    ))
+    && missingArtifacts.length === 0
   ) {
     return buildGovernanceVerdict('stop', {
       gate_result: 'ready',
@@ -601,6 +947,7 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
         terminal_phase: terminalPhase,
         terminal_outcome: 'blocked',
       },
+      diagnostics: functionalReviewActive ? { review_validation: reviewValidation } : {},
       message: 'Stop hook completed with a blocked terminal state.',
     });
   }
@@ -611,6 +958,8 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
     && reviewStatus === 'approved'
     && (hasWritebackDeclined || hasWritebackReceipt)
     && terminalPhase === 'closed'
+    && (!functionalReviewActive || (reviewValidation && reviewValidation.completion_ready))
+    && missingArtifacts.length === 0
   ) {
     return buildGovernanceVerdict('stop', {
       gate_result: 'ready',
@@ -636,6 +985,7 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
         terminal_phase: terminalPhase,
         terminal_outcome: 'completed',
       },
+      diagnostics: functionalReviewActive ? { review_validation: reviewValidation } : {},
       message: 'Stop hook completed with a structured terminal state.',
     });
   }
@@ -666,6 +1016,7 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
     },
     diagnostics: {
       runtime_gate_status: hostRuntime.runtime_gate_status,
+      review_validation: reviewValidation,
     },
     message: 'Stop hook found incomplete cutepower artifacts; host closure is not completed.',
   });
@@ -676,6 +1027,9 @@ module.exports = {
   collectArtifactState,
   evaluateStopGate,
   evaluateToolUseVerdict,
+  extractToolMetadata,
   gateToolAction,
   inferToolAction,
+  inferToolActionFromCommand,
+  inferToolActionFromMetadata,
 };

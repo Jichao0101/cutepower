@@ -86,6 +86,16 @@ Runtime hardening coverage:
 - `Stop` cannot convert an earlier failure into `completed`; success now depends on legal terminal state plus required closure artifacts:
   - `evidence_manifest`
   - `review_decision` when review is required
+- functional review closure now requires a structured artifact chain:
+  - `requirements_package`
+  - `acceptance_items`
+  - `evidence_plan`
+  - `relevant_context`
+  - `evidence_manifest`
+  - `evidence_gaps`
+  - `review_decision`
+  - `compliance_matrix`
+- `PreToolUse` now classifies tool risk metadata-first and only falls back to command-string heuristics when structured metadata is absent
   - `writeback_receipt` or `writeback_declined` when writeback is required
 
 Run-state model:

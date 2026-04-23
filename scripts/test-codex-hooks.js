@@ -88,6 +88,77 @@ function seedPreflightArtifacts(repoRoot, sessionId, routeId, capability, gateSt
   });
 }
 
+function writeFunctionalReviewClosure(repoRoot, sessionId, overrides = {}) {
+  const artifactRoot = path.join(repoRoot, '.cutepower');
+  const artifacts = {
+    requirements_package: {
+      requirements: [
+        {
+          requirement_id: 'REQ-1',
+          requirement_text: 'System exposes governed result',
+          requirement_type: 'functional',
+          severity: 'high',
+          source_path: 'docs/spec.md',
+        },
+      ],
+    },
+    acceptance_items: {
+      acceptance_items: [
+        {
+          acceptance_item_id: 'ACC-1',
+          mapped_requirement_ids: ['REQ-1'],
+          pass_criteria: 'Observed in allowed code path',
+          expected_evidence_types: ['code_read'],
+        },
+      ],
+    },
+    evidence_plan: {
+      allowed_paths: ['scripts/', 'contracts/'],
+      planned_evidence_sources: ['scripts/runtime-gates.js'],
+    },
+    relevant_context: {
+      allowed_paths: ['scripts/', 'contracts/'],
+      core_paths: ['scripts/runtime-gates.js'],
+    },
+    evidence_manifest: {
+      status: 'complete',
+      evidence: [
+        {
+          evidence_id: 'EVD-1',
+          path: 'scripts/runtime-gates.js',
+          acceptance_item_ids: ['ACC-1'],
+        },
+      ],
+    },
+    evidence_gaps: {
+      gaps: [],
+    },
+    review_decision: {
+      decision: 'approved',
+      blocked_by: [],
+      allows_completed: true,
+      evidence_sufficiency_summary: 'sufficient',
+    },
+    compliance_matrix: {
+      rows: [
+        {
+          requirement_id: 'REQ-1',
+          acceptance_item_ids: ['ACC-1'],
+          evidence_ids: ['EVD-1'],
+          status: 'pass',
+          notes: 'Covered',
+        },
+      ],
+    },
+    writeback_declined: { status: 'declined' },
+    terminal_phase: 'closed',
+    ...overrides,
+  };
+  for (const [name, value] of Object.entries(artifacts)) {
+    writeArtifact(artifactRoot, sessionId, name, value);
+  }
+}
+
 function testUserPromptSubmitReadyIssuesCapability() {
   const repoRoot = makeRepoFixture({ active: true });
   const result = runHookCli('user-prompt-submit', {
@@ -234,10 +305,7 @@ function testStopCompletedOnlyWithLegalClosure() {
     'explicit_read_only_functional_audit',
     'functional_audit_read_only'
   );
-  writeArtifact(path.join(repoRoot, '.cutepower'), 's-stop-ok', 'evidence_manifest', { status: 'complete' });
-  writeArtifact(path.join(repoRoot, '.cutepower'), 's-stop-ok', 'review_decision', { decision: 'approved' });
-  writeArtifact(path.join(repoRoot, '.cutepower'), 's-stop-ok', 'writeback_declined', { status: 'declined' });
-  writeArtifact(path.join(repoRoot, '.cutepower'), 's-stop-ok', 'terminal_phase', 'closed');
+  writeFunctionalReviewClosure(repoRoot, 's-stop-ok');
   const result = runHookCli('Stop', {
     cwd: repoRoot,
     session_id: 's-stop-ok',
@@ -245,6 +313,58 @@ function testStopCompletedOnlyWithLegalClosure() {
   assert.equal(result.status, 0);
   assert.equal(result.parsed.decision, 'allow');
   assert.equal(result.parsed.status, 'completed');
+}
+
+function testStopRejectsFunctionalReviewWithMissingRequirementsArtifact() {
+  const repoRoot = makeRepoFixture({ active: true });
+  seedPreflightArtifacts(
+    repoRoot,
+    's-stop-missing-req',
+    'explicit_read_only_functional_audit',
+    'functional_audit_read_only'
+  );
+  writeFunctionalReviewClosure(repoRoot, 's-stop-missing-req');
+  fs.rmSync(path.join(repoRoot, '.cutepower', 'run', 's-stop-missing-req', 'requirements_package.json'), { force: true });
+  const result = runHookCli('Stop', {
+    cwd: repoRoot,
+    session_id: 's-stop-missing-req',
+  });
+  assert.equal(result.status, 0);
+  assert.notEqual(result.parsed.status, 'completed');
+  assert(result.parsed.completion_gate);
+  assert(result.parsed.diagnostics.review_validation);
+}
+
+function testPreToolUseMetadataInferenceIsExposed() {
+  const repoRoot = makeRepoFixture({ active: true });
+  seedPreflightArtifacts(
+    repoRoot,
+    's-metadata',
+    'explicit_read_only_functional_audit',
+    'functional_audit_read_only'
+  );
+  const result = runHookCli('PreToolUse', {
+    cwd: repoRoot,
+    session_id: 's-metadata',
+    session_capability: {
+      session_id: 's-metadata',
+      route_id: 'explicit_read_only_functional_audit',
+      phase: 'evidence_collection',
+      capability: 'functional_audit_read_only',
+      allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
+      required_artifacts: ['task_profile', 'route_resolution', 'runtime_gate'],
+    },
+    tool_metadata: {
+      tool_name: 'Read',
+      operation_class: 'read',
+      intent: 'read',
+      is_mutating: false,
+      target_paths: ['contracts/gate-matrix.yaml'],
+    },
+  });
+  assert.equal(result.status, 0);
+  assert.equal(result.parsed.decision, 'allow');
+  assert.equal(result.parsed.diagnostics.inferred_action.inference_source, 'metadata');
 }
 
 function testCliExceptionStillEmitsJsonAndNonZeroExit() {
@@ -278,6 +398,8 @@ function run() {
   testPreToolUseDeniesUnmappedHighRiskExec();
   testStopAfterFailureCannotPretendCompleted();
   testStopCompletedOnlyWithLegalClosure();
+  testStopRejectsFunctionalReviewWithMissingRequirementsArtifact();
+  testPreToolUseMetadataInferenceIsExposed();
   testCliExceptionStillEmitsJsonAndNonZeroExit();
   process.stdout.write('test-codex-hooks: ok\n');
 }

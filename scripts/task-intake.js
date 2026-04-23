@@ -1,5 +1,72 @@
 'use strict';
 
+function matchesAnyPattern(patterns, value) {
+  return patterns.some((pattern) => pattern.test(value));
+}
+
+const EXPLICIT_CUTEPOWER_PATTERNS = Object.freeze([
+  /\bcutepower\b/,
+  /\bstrict cutepower\b/,
+  /\bexplicit cutepower\b/,
+  /\bexplicit mode\b/,
+  /\bcute-[\w-]+\b/,
+  /按\s*cutepower/,
+  /按照\s*cutepower/,
+  /严格按照\s*cutepower/,
+  /用\s*cutepower/,
+  /使用\s*cutepower/,
+]);
+
+const AUDIT_PATTERNS = Object.freeze([
+  /read-?only functional audit/,
+  /functional audit/,
+  /readonly audit/,
+  /read only audit/,
+  /read-?only review/,
+  /readonly review/,
+  /\bcode review\b/,
+  /\bfunctional review\b/,
+  /按\s*cutepower.*(?:审查|分析|review|audit|检查)/,
+  /按照\s*cutepower.*(?:审查|分析|review|audit|检查)/,
+  /严格按照\s*cutepower.*(?:审查|分析|review|audit|检查)/,
+  /只读审查/,
+  /read-?only\s*审查/,
+  /合规分析/,
+  /符合性分析/,
+  /对照设计文档(?:检查|审查|分析|review|audit)?/,
+  /代码对照设计文档/,
+  /是否满足设计文档/,
+  /是否符合设计/,
+  /design(?: document| doc)?.*(?:compliance|conformance|review|audit|check)/,
+  /check.*design(?: document| doc)/,
+]);
+
+const READ_ONLY_PATTERNS = Object.freeze([
+  /read-?only/,
+  /readonly/,
+  /read only/,
+  /只读/,
+  /不修改代码/,
+  /只分析/,
+  /仅分析/,
+  /analysis only/,
+  /analyze only/,
+  /do not modify code/,
+  /without modifying code/,
+]);
+
+const HOOK_INTEGRATION_FIX_PATTERNS = Object.freeze([
+  /hook integration fix/,
+  /codex hook integration fix/,
+  /host runtime defect/,
+  /runtime defect/,
+  /hook 宿主/,
+  /hook 集成/,
+  /新版 codex hook 宿主/,
+  /修复.*(?:codex hook|hook|宿主).*(?:兼容|集成|问题|异常|缺陷)/,
+  /(?:codex hook|hook|宿主).*(?:修复|改造|兼容|集成问题)/,
+]);
+
 function extractPromptText(input = {}) {
   return String(
     input.prompt
@@ -13,29 +80,22 @@ function extractPromptText(input = {}) {
 function analyzeCutepowerIntent(input = {}) {
   const prompt = extractPromptText(input).trim();
   const normalizedPrompt = prompt.toLowerCase();
-  const explicitCutepowerTerms = [
-    /\bcutepower\b/,
-    /\bstrict cutepower\b/,
-    /\bexplicit cutepower\b/,
-    /\bexplicit mode\b/,
-    /\bcute-[\w-]+\b/,
-    /read-?only functional audit/,
-    /functional audit/,
-    /readonly audit/,
-    /read only audit/,
-  ];
   const repoGovernanceTerms = [
+    ...AUDIT_PATTERNS,
     /\breview\b/,
-    /\bcode review\b/,
-    /\bfunctional review\b/,
     /\bwriteback\b/,
     /\bboard_execute\b/,
     /\bboard execute\b/,
     /protected business execution/,
     /\bincident\b/,
+    /审查/,
+    /审核/,
+    /分析代码/,
+    /设计文档/,
   ];
-  const isExplicitCutepowerRequest = explicitCutepowerTerms.some((pattern) => pattern.test(normalizedPrompt));
-  const isRepoGovernanceTask = repoGovernanceTerms.some((pattern) => pattern.test(normalizedPrompt));
+  const isExplicitCutepowerRequest = matchesAnyPattern(EXPLICIT_CUTEPOWER_PATTERNS, normalizedPrompt)
+    || matchesAnyPattern(AUDIT_PATTERNS, normalizedPrompt);
+  const isRepoGovernanceTask = matchesAnyPattern(repoGovernanceTerms, normalizedPrompt);
   const isGreetingLike = /^(?:hi|hello|hey|hallo|你好|您好|嗨|哈喽)\b[!\s]*$/i.test(prompt);
   const isGeneralRepoQuestion = /^(?:please\s+)?(?:explain|summarize|describe)\s+(?:this|the)\s+repo\b/i.test(prompt);
 
@@ -54,29 +114,30 @@ function normalizeTaskProfile(input = {}) {
   const intent = analyzeCutepowerIntent(input);
   const prompt = intent.normalized_prompt;
   const explicitMode = input.explicit_mode !== false;
-  const requestedAudit = /functional audit|read-only audit|readonly audit|read only audit/.test(prompt)
-    || input.audit_mode === 'functional_read_only';
-  const readOnlyRequested = /read-only|readonly|read only/.test(prompt)
-    || input.evidence_collection_mode === 'read_only';
-  const requestedIntegrationFix = /hook integration fix|codex hook integration fix|integration defect|runtime defect|修复|改造/.test(prompt)
+  const requestedIntegrationFix = matchesAnyPattern(HOOK_INTEGRATION_FIX_PATTERNS, prompt)
     || input.task_type === 'hook_integration_fix';
+  const requestedAudit = matchesAnyPattern(AUDIT_PATTERNS, prompt)
+    || input.audit_mode === 'functional_read_only';
+  const readOnlyRequested = requestedAudit
+    || matchesAnyPattern(READ_ONLY_PATTERNS, prompt)
+    || input.evidence_collection_mode === 'read_only';
 
   return {
-    primary_type: requestedAudit
-      ? 'functional_audit'
-      : requestedIntegrationFix
-        ? 'hook_integration_fix'
+    primary_type: requestedIntegrationFix
+      ? 'hook_integration_fix'
+      : requestedAudit
+        ? 'functional_audit'
         : 'general_task',
-    task_modifiers: requestedAudit
-      ? ['read_only', 'strict']
-      : requestedIntegrationFix
+    task_modifiers: requestedIntegrationFix
         ? ['implementation', 'verification']
+        : requestedAudit
+          ? ['read_only', 'strict']
         : [],
     explicit_mode: explicitMode,
-    requested_capability: requestedAudit && readOnlyRequested
-      ? 'functional_audit_read_only'
-      : requestedIntegrationFix
-        ? 'hook_integration_fix'
+    requested_capability: requestedIntegrationFix
+      ? 'hook_integration_fix'
+      : requestedAudit && readOnlyRequested
+        ? 'functional_audit_read_only'
         : 'unknown',
     requested_outputs: ['task_profile', 'route_resolution', 'runtime_gate'],
     governance_signal: intent.should_consider_cutepower,

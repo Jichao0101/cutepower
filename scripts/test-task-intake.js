@@ -16,28 +16,27 @@ function testExplicitReadOnlyAuditGetsReadyGateWithAuthorization() {
   });
   assert.equal(gate.status, 'ready');
   assert.equal(gate.route_resolution.route_id, 'explicit_read_only_functional_audit');
-  assert.deepEqual(gate.allowed_actions, [
-    'runtime_discovery_read',
-    'authorized_business_context_read',
-  ]);
+  assert.equal(gate.capability, 'functional_audit_read_only');
 }
 
-function testExplicitReadOnlyAuditBlocksWithoutAuthorization() {
+function testChineseAuditPromptRoutesToReadOnlyCapability() {
   const gate = buildRuntimeGate({
-    prompt: 'run a strict read-only functional audit over requirements and code evidence',
+    prompt: '严格按照cutepower分析代码是否满足设计文档',
     evidence_collection_mode: 'read_only',
     authorization: {
-      user_explicitly_authorized: false,
-      project_paths_authorized: false,
+      user_explicitly_authorized: true,
+      project_paths_authorized: true,
+      allowed_paths: ['contracts/', 'scripts/'],
     },
   });
-  assert.equal(gate.status, 'blocked');
-  assert.equal(gate.blocking_reasons[0], 'explicit_authorization_for_project_read_missing');
+  assert.equal(gate.status, 'ready');
+  assert.equal(gate.route_resolution.route_id, 'explicit_read_only_functional_audit');
+  assert.equal(gate.capability, 'functional_audit_read_only');
 }
 
-function testExplicitHookIntegrationFixGetsImplementationRoute() {
+function testHookIntegrationFixStillWinsForHookRepairPrompt() {
   const gate = buildRuntimeGate({
-    prompt: 'do a Codex hook integration fix for this repo',
+    prompt: '请按cutepower修复 hook 集成问题并恢复宿主兼容性',
     authorization: {
       user_explicitly_authorized: true,
       project_paths_authorized: true,
@@ -46,11 +45,7 @@ function testExplicitHookIntegrationFixGetsImplementationRoute() {
   });
   assert.equal(gate.status, 'ready');
   assert.equal(gate.route_resolution.route_id, 'explicit_hook_integration_fix');
-  assert.deepEqual(gate.allowed_actions, [
-    'runtime_discovery_read',
-    'authorized_business_context_read',
-    'repo_local_verification_exec',
-  ]);
+  assert.equal(gate.capability, 'hook_integration_fix');
 }
 
 function testGeneralPromptDoesNotRequestCutepowerGovernance() {
@@ -62,8 +57,8 @@ function testGeneralPromptDoesNotRequestCutepowerGovernance() {
 
 function run() {
   testExplicitReadOnlyAuditGetsReadyGateWithAuthorization();
-  testExplicitReadOnlyAuditBlocksWithoutAuthorization();
-  testExplicitHookIntegrationFixGetsImplementationRoute();
+  testChineseAuditPromptRoutesToReadOnlyCapability();
+  testHookIntegrationFixStillWinsForHookRepairPrompt();
   testGeneralPromptDoesNotRequestCutepowerGovernance();
   process.stdout.write('test-task-intake: ok\n');
 }

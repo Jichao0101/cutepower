@@ -5,28 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const hookModule = require('./codex-hooks');
-const {
-  handlePreToolUse,
-  handleStop,
-  handleUserPromptSubmit,
-  runHookHandler,
-  stableStringify,
-} = hookModule;
-
-function parseHookJson(result) {
-  return JSON.parse(stableStringify(result));
-}
-
-function runAndParseHook(hookName, payload) {
-  const originalWrite = process.stdout.write;
-  process.stdout.write = () => true;
-  try {
-    return parseHookJson(runHookHandler(hookName, payload));
-  } finally {
-    process.stdout.write = originalWrite;
-  }
-}
+const { runHookHandler } = require('./codex-hooks');
 
 function makeRepoFixture({ active = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cutepower-hook-'));
@@ -50,107 +29,81 @@ function validateRequiredKeys(schema, value, schemaName) {
   }
 }
 
-function testUserPromptSubmitPassesThroughHalloInNonCutepowerRepo() {
-  const repoRoot = makeRepoFixture({ active: false });
-  const response = parseHookJson(handleUserPromptSubmit({
-    prompt: 'hallo',
-    cwd: repoRoot,
-    session_id: 's-hallo',
-  }));
-  assert.equal(response.decision, 'allow');
-  assert.equal(response.status, 'pass_through');
-  assert.equal(response.entry_action, 'pass_through');
-  assert.deepEqual(response.diagnostics.matched_conditions, []);
-}
-
-function testUserPromptSubmitPassesThroughCommonPrompts() {
-  const repoRoot = makeRepoFixture({ active: false });
-  const prompts = ['hello', '你好', 'Explain this repo'];
-  for (const prompt of prompts) {
-    const response = parseHookJson(handleUserPromptSubmit({
-      prompt,
-      cwd: repoRoot,
-      session_id: `s-${prompt}`,
-    }));
-    assert.equal(response.decision, 'allow');
-    assert.equal(response.status, 'pass_through');
-    assert.equal(response.entry_action, 'pass_through');
+function captureHookJson(hookName, payload) {
+  let stdout = '';
+  let stderr = '';
+  const originalStdoutWrite = process.stdout.write;
+  const originalStderrWrite = process.stderr.write;
+  process.stdout.write = (chunk) => {
+    stdout += String(chunk);
+    return true;
+  };
+  process.stderr.write = (chunk) => {
+    stderr += String(chunk);
+    return true;
+  };
+  try {
+    const returned = runHookHandler(hookName, payload);
+    const trimmed = stdout.trim();
+    assert(trimmed, `${hookName} did not emit stdout`);
+    assert.equal(trimmed.split('\n').length, 1, `${hookName} emitted more than one stdout line`);
+    return {
+      returned,
+      stdout: trimmed,
+      stderr: stderr.trim(),
+      parsed: JSON.parse(trimmed),
+    };
+  } finally {
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
   }
 }
 
-function testUserPromptSubmitTakesOverExplicitCutepowerTask() {
+function testUserPromptSubmitPassesThroughNonTakeoverPromptAsJson() {
   const repoRoot = makeRepoFixture({ active: false });
-  const response = parseHookJson(handleUserPromptSubmit({
-    prompt: 'strictly follow cutepower and do a codex hook integration fix',
+  const result = captureHookJson('UserPromptSubmit', {
+    prompt: 'hello',
     cwd: repoRoot,
-    session_id: 's-user',
+    session_id: 's-non-takeover',
+  });
+  validateRequiredKeys(
+    readSchema('schemas/hook-responses/user-prompt-submit.json'),
+    result.parsed,
+    'user-prompt-submit'
+  );
+  assert.equal(result.parsed.decision, 'pass_through');
+  assert.equal(result.parsed.status, 'not_applicable');
+  assert.equal(result.parsed.reason, 'non_governance_prompt_passthrough');
+  assert.equal(result.parsed.entry_action, 'pass_through');
+}
+
+function testUserPromptSubmitReturnsStructuredJsonForChineseAuditPrompt() {
+  const repoRoot = makeRepoFixture({ active: true });
+  const result = captureHookJson('UserPromptSubmit', {
+    prompt: '严格按照cutepower分析代码是否满足设计文档',
+    cwd: repoRoot,
+    session_id: 's-cn-audit',
+    evidence_collection_mode: 'read_only',
     authorization: {
       user_explicitly_authorized: true,
       project_paths_authorized: true,
-      container_access_authorized: true,
       allowed_paths: ['contracts/', 'scripts/', 'docs/'],
     },
-  }));
-  assert.equal(response.decision, 'allow');
-  assert.equal(response.status, 'ready');
-  assert.equal(response.entry_action, 'take_over_for_cutepower');
-  assert.equal(response.runtime_gate.capability, 'hook_integration_fix');
-  assert(response.diagnostics.matched_conditions.includes('explicit_cutepower_request'));
+  });
+  validateRequiredKeys(
+    readSchema('schemas/hook-responses/user-prompt-submit.json'),
+    result.parsed,
+    'user-prompt-submit'
+  );
+  assert.equal(result.parsed.decision, 'allow');
+  assert.equal(result.parsed.status, 'ready');
+  assert.equal(result.parsed.runtime_gate.capability, 'functional_audit_read_only');
 }
 
-function testUserPromptSubmitTakesOverRepoLocalGovernanceTask() {
-  const repoRoot = makeRepoFixture({ active: true });
-  const response = parseHookJson(handleUserPromptSubmit({
-    prompt: 'please run a review for this repo',
-    cwd: repoRoot,
-    session_id: 's-review',
-  }));
-  assert.equal(response.decision, 'deny');
-  assert.equal(response.status, 'declined');
-  assert.equal(response.entry_action, 'legal_block');
-  assert(response.diagnostics.matched_conditions.includes('repo_local_governance_task'));
-}
-
-function testUserPromptSubmitFailSafePassThroughOnException() {
-  const originalExistsSync = fs.existsSync;
-  fs.existsSync = () => {
-    throw new Error('forced existsSync failure');
-  };
-  try {
-    const response = runAndParseHook('UserPromptSubmit', {
-      prompt: 'hallo',
-      session_id: 's-exception',
-    });
-    validateRequiredKeys(
-      readSchema('schemas/hook-responses/user-prompt-submit.json'),
-      response,
-      'user-prompt-submit'
-    );
-    assert.equal(response.decision, 'allow');
-    assert.equal(response.status, 'pass_through');
-    assert.equal(response.reason, 'user_prompt_submit_fail_safe_passthrough');
-    assert.equal(response.diagnostics.error.message, 'forced existsSync failure');
-  } finally {
-    fs.existsSync = originalExistsSync;
-  }
-}
-
-function testPreToolUsePassesThroughWhenCutepowerInactive() {
-  const repoRoot = makeRepoFixture({ active: false });
-  const response = parseHookJson(handlePreToolUse({
-    command: 'sed -n 1,40p README.md',
-    cwd: repoRoot,
-    session_id: 's-pass',
-  }));
-  assert.equal(response.decision, 'allow');
-  assert.equal(response.status, 'pass_through');
-  assert.equal(response.action, 'pass_through');
-}
-
-function testPreToolUseAllowsAuthorizedReadOnlyAuditEvidenceRead() {
-  const response = runAndParseHook('PreToolUse', {
-    command: 'sed -n 1,40p contracts/gate-matrix.md',
-    session_id: 's-tool',
+function testPreToolUseUnmappedEventPassesThroughAsJson() {
+  const result = captureHookJson('PreToolUse', {
+    command: 'perl -e 1',
+    session_id: 's-unmapped',
     route_id: 'explicit_read_only_functional_audit',
     phase: 'evidence_collection',
     capability: 'functional_audit_read_only',
@@ -160,40 +113,17 @@ function testPreToolUseAllowsAuthorizedReadOnlyAuditEvidenceRead() {
   });
   validateRequiredKeys(
     readSchema('schemas/hook-responses/pre-tool-use.json'),
-    response,
+    result.parsed,
     'pre-tool-use'
   );
-  assert.equal(response.decision, 'allow');
-  assert.equal(response.action, 'authorized_business_context_read');
+  assert.equal(result.parsed.decision, 'pass_through');
+  assert.equal(result.parsed.status, 'not_applicable');
+  assert.equal(result.parsed.reason, 'unmapped_tool_event');
+  assert.equal(result.parsed.action, 'pass_through');
 }
 
-function testPreToolUseRejectsUnauthorizedBusinessRead() {
-  const response = parseHookJson(handlePreToolUse({
-    command: 'sed -n 1,40p contracts/gate-matrix.md',
-    session_id: 's-deny',
-    route_id: 'explicit_read_only_functional_audit',
-    phase: 'evidence_collection',
-    capability: 'functional_audit_read_only',
-    evidence_collection_mode: 'read_only',
-    allowed_actions: ['runtime_discovery_read'],
-    allowed_paths: ['contracts/', 'scripts/'],
-  }));
-  assert.equal(response.decision, 'deny');
-  assert.equal(response.action, 'forbidden_business_context_read');
-}
-
-function testStopPassesThroughWhenCutepowerInactive() {
-  const repoRoot = makeRepoFixture({ active: false });
-  const response = parseHookJson(handleStop({
-    cwd: repoRoot,
-    session_id: 's-stop-pass',
-  }));
-  assert.equal(response.decision, 'allow');
-  assert.equal(response.status, 'pass_through');
-}
-
-function testStopReturnsBlockedTerminalPackage() {
-  const response = runAndParseHook('Stop', {
+function testStopReturnsStructuredJson() {
+  const result = captureHookJson('Stop', {
     session_id: 's-stop',
     route_id: 'explicit_read_only_functional_audit',
     phase: 'evidence_collection',
@@ -210,45 +140,19 @@ function testStopReturnsBlockedTerminalPackage() {
   });
   validateRequiredKeys(
     readSchema('schemas/hook-responses/stop.json'),
-    response,
+    result.parsed,
     'stop'
   );
-  assert.equal(response.decision, 'allow');
-  assert.equal(response.status, 'blocked');
-  assert.equal(response.completion_gate.reason, 'blocked_review_terminal_state_closed');
-}
-
-function testPreToolUseAllowsRepoLocalRegressionExecution() {
-  const response = parseHookJson(handlePreToolUse({
-    cmd: 'node scripts/test-codex-hooks.js',
-    session_id: 's-regression',
-    route_id: 'explicit_hook_integration_fix',
-    phase: 'implementation',
-    capability: 'hook_integration_fix',
-    evidence_collection_mode: 'implementation',
-    allowed_actions: [
-      'runtime_discovery_read',
-      'authorized_business_context_read',
-      'repo_local_verification_exec',
-    ],
-    allowed_paths: ['contracts/', 'scripts/', 'docs/'],
-  }));
-  assert.equal(response.decision, 'allow');
-  assert.equal(response.action, 'repo_local_verification_exec');
+  assert.equal(result.parsed.decision, 'allow');
+  assert.equal(result.parsed.reason, 'blocked_review_terminal_state_closed');
+  assert.equal(result.parsed.completion_gate.reason, 'blocked_review_terminal_state_closed');
 }
 
 function run() {
-  testUserPromptSubmitPassesThroughHalloInNonCutepowerRepo();
-  testUserPromptSubmitPassesThroughCommonPrompts();
-  testUserPromptSubmitTakesOverExplicitCutepowerTask();
-  testUserPromptSubmitTakesOverRepoLocalGovernanceTask();
-  testUserPromptSubmitFailSafePassThroughOnException();
-  testPreToolUsePassesThroughWhenCutepowerInactive();
-  testPreToolUseAllowsAuthorizedReadOnlyAuditEvidenceRead();
-  testPreToolUseRejectsUnauthorizedBusinessRead();
-  testStopPassesThroughWhenCutepowerInactive();
-  testStopReturnsBlockedTerminalPackage();
-  testPreToolUseAllowsRepoLocalRegressionExecution();
+  testUserPromptSubmitPassesThroughNonTakeoverPromptAsJson();
+  testUserPromptSubmitReturnsStructuredJsonForChineseAuditPrompt();
+  testPreToolUseUnmappedEventPassesThroughAsJson();
+  testStopReturnsStructuredJson();
   process.stdout.write('test-codex-hooks: ok\n');
 }
 

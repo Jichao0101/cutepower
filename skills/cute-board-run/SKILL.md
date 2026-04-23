@@ -1,37 +1,59 @@
 ---
 name: cute-board-run
-description: Bind board targets, execute board-side deploy and run commands, collect artifacts, and emit a reusable board evidence package for cutepower P1. Do not use it as a review, repo-change, or writeback authority.
+description: Execute board-side evidence collection for governed routes without taking repo, review, or writeback authority.
 ---
+
+# Goal
+
+Collect board evidence for the routed workflow.
 
 # Contracts
 
 - `gate-matrix`
 - `role-contracts`
 - `routing-table`
+- `skill-route-matrix`
 
-# Input
+# When This Skill Is Legal
 
-- `board_target`
-- `deploy_artifacts`
-- `run_commands`
-- `collect_paths`
-- `expected_signals`
-- `timeout_policy`
-- `reset_or_recovery_steps`
-- `artifact_expectations`
+- Only when `dispatch_manifest.next_skill` is `cute-board-run`.
+- Only for routes that require board execution or board artifact collection.
 
-# Output
+# Required Input Artifacts
+
+- `task_profile`
+- `route_resolution`
+- `dispatch_manifest`
+- `runtime_gate`
+- board execution package
+
+# Workflow
+
+1. Bind the legal board target and run package.
+2. Execute the allowed board steps for evidence collection.
+3. Collect artifacts and summarize observed signals.
+4. Handoff to the next routed review or closure skill.
+
+# Required Outputs
 
 - `board_run_report`
 - `artifact_manifest`
 - `signal_observations`
 - `execution_status`
-- `board_failure_reason`
-- `environment_fingerprint`
+- `dispatch_manifest`
+
+# Phase Exit / Next Skill
+
+- Exit to the next skill declared by the route workflow, typically review.
+
+# Stop Conditions
+
+- missing board target
+- missing run commands
+- invalid collection paths
 
 # Do Not Do
 
-- Do not determine root cause.
 - Do not edit repository files.
-- Do not emit code-review or functional-review decisions.
-- Do not decide writeback level or closure.
+- Do not emit final review decisions.
+- Do not choose writeback level.

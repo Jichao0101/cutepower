@@ -49,6 +49,14 @@
       "version": "0.3.0",
       "status": "active",
       "precedence": 50
+    },
+    {
+      "id": "skill-route-matrix",
+      "path": "contracts/skill_route_matrix.yaml",
+      "schema_path": "schemas/skill-route-matrix.schema.json",
+      "version": "0.1.0",
+      "status": "active",
+      "precedence": 60
     }
   ]
 }

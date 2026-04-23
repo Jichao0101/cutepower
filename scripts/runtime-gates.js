@@ -15,6 +15,7 @@ const {
 const DEFAULT_REQUIRED_PREFLIGHT = Object.freeze([
   'task_profile',
   'route_resolution',
+  'dispatch_manifest',
   'runtime_gate',
 ]);
 
@@ -629,6 +630,59 @@ function readArtifactIfPresent(hostRuntime, artifactName) {
   return JSON.parse(fs.readFileSync(target, 'utf8'));
 }
 
+function extractGovernedSkill(payload = {}) {
+  const metadata = payload.tool_metadata || payload.metadata || payload.tool || {};
+  const candidates = [
+    payload.skill_name,
+    payload.skill,
+    payload.current_skill,
+    metadata.skill_name,
+    metadata.skill,
+    metadata.current_skill,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
+function evaluateSkillTransition(hostRuntime, dispatchManifest, payload = {}) {
+  const governedSkill = extractGovernedSkill(payload);
+  if (!governedSkill) {
+    return null;
+  }
+  if (!dispatchManifest || typeof dispatchManifest !== 'object') {
+    return {
+      gate_result: 'blocked',
+      reason: 'dispatch_manifest_missing_for_skill_routing',
+      governed_skill: governedSkill,
+    };
+  }
+  if (dispatchManifest.next_skill !== governedSkill) {
+    return {
+      gate_result: 'blocked',
+      reason: 'governed_skill_out_of_route_order',
+      governed_skill: governedSkill,
+      expected_next_skill: dispatchManifest.next_skill || null,
+    };
+  }
+  if (dispatchManifest.current_phase && hostRuntime.phase && dispatchManifest.current_phase !== hostRuntime.phase) {
+    return {
+      gate_result: 'blocked',
+      reason: 'dispatch_manifest_phase_mismatch',
+      governed_skill: governedSkill,
+      expected_phase: dispatchManifest.current_phase,
+    };
+  }
+  return {
+    gate_result: 'ready',
+    reason: 'governed_skill_matches_dispatch_manifest',
+    governed_skill: governedSkill,
+  };
+}
+
 function collectArtifactState({ hostRuntime, artifacts = {}, requiredArtifacts = [] }) {
   const resolved = {};
   const missing = [];
@@ -688,6 +742,7 @@ function evaluateToolUseVerdict({ payload = {}, hostRuntime }) {
     artifacts: payload.artifacts || {},
     requiredArtifacts,
   });
+  const skillTransition = evaluateSkillTransition(hostRuntime, artifactState.artifacts.dispatch_manifest, payload);
 
   if (!capabilityCheck.valid) {
     return buildGovernanceVerdict('pre_tool_use', {
@@ -734,6 +789,29 @@ function evaluateToolUseVerdict({ payload = {}, hostRuntime }) {
         runtime_gate_status: hostRuntime.runtime_gate_status,
       },
       message: 'Tool use is blocked because required runtime artifacts are missing.',
+    });
+  }
+
+  if (skillTransition && skillTransition.gate_result !== 'ready') {
+    return buildGovernanceVerdict('pre_tool_use', {
+      gate_result: 'blocked',
+      allowed_to_continue: false,
+      reason: skillTransition.reason,
+      required_artifacts: requiredArtifacts,
+      missing_artifacts: [],
+      allowed_actions: hostRuntime.allowed_actions || [],
+      session: {
+        session_id: hostRuntime.session_id,
+        route_id: hostRuntime.route_id,
+        phase: hostRuntime.phase,
+        capability: hostRuntime.capability,
+      },
+      diagnostics: {
+        governed_skill: skillTransition.governed_skill,
+        expected_next_skill: skillTransition.expected_next_skill || null,
+        expected_phase: skillTransition.expected_phase || null,
+      },
+      message: 'Tool use is blocked because the governed skill order does not match the dispatch manifest.',
     });
   }
 

@@ -88,6 +88,7 @@ function buildHostRuntime(input = {}) {
   const requiredPreflightOutputs = runtimeGate.required_preflight_outputs || input.required_preflight_outputs || [
     'task_profile',
     'route_resolution',
+    'dispatch_manifest',
     'runtime_gate',
   ];
   return {

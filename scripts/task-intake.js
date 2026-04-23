@@ -5,6 +5,7 @@ const path = require('path');
 
 const { writeArtifact } = require('./run-artifacts');
 const { buildGovernanceVerdict } = require('./governance-response');
+const { buildTaskProfile, loadContracts } = require('./task-profile');
 
 function matchesAnyPattern(patterns, value) {
   return patterns.some((pattern) => pattern.test(value));
@@ -154,27 +155,45 @@ function analyzeCutepowerIntent(input = {}) {
   };
 }
 
-function normalizeTaskProfile(input = {}) {
+function normalizeTaskProfile(input = {}, docs = loadContracts()) {
   const intent = analyzeCutepowerIntent(input);
-  const explicitMode = input.explicit_mode !== false;
-  const requestedAudit = intent.is_audit_intent
-    || input.audit_mode === 'functional_read_only';
-  const readOnlyRequested = requestedAudit
-    || intent.is_read_only_intent
-    || input.evidence_collection_mode === 'read_only';
+  const taskGoal = extractPromptText(input).trim();
+  if (!taskGoal) {
+    return {
+      primary_type: null,
+      route_id: null,
+      route_status: 'needs_clarification',
+      requires_dispatch: false,
+      governance_signal: intent.should_consider_cutepower,
+      resolved_skill_chain: [],
+      missing_context: [],
+      inferred_context: {},
+    };
+  }
+
+  const profiled = buildTaskProfile({
+    task_goal: taskGoal,
+    cwd: input.cwd || input.workspace_root || input.repo_root || process.cwd(),
+    board_target: input.board_target,
+  }, docs);
 
   return {
-    primary_type: requestedAudit
-      ? 'functional_audit'
-      : 'general_task',
-    task_modifiers: requestedAudit
-      ? ['read_only', 'strict']
-      : [],
-    explicit_mode: explicitMode,
-    requested_capability: requestedAudit && readOnlyRequested
-      ? 'functional_audit_read_only'
-      : 'unknown',
-    requested_outputs: ['task_profile', 'route_resolution', 'runtime_gate'],
+    ...profiled,
+    primary_type: intent.is_audit_intent ? 'audit' : profiled.primary_type,
+    route_id: intent.is_audit_intent && (intent.is_read_only_intent || input.evidence_collection_mode === 'read_only')
+      ? 'audit_functional_read_only'
+      : profiled.route_id,
+    route_status: intent.is_audit_intent && (intent.is_read_only_intent || input.evidence_collection_mode === 'read_only')
+      ? 'resolved'
+      : profiled.route_status,
+    task_modifiers: intent.is_audit_intent
+      ? Array.from(new Set([...(profiled.task_modifiers || []), 'functional_scope', 'read_only'])).sort()
+      : profiled.task_modifiers,
+    resolved_skill_chain: intent.is_audit_intent && (intent.is_read_only_intent || input.evidence_collection_mode === 'read_only')
+      ? ['cute-scope-plan', 'cute-functional-review', 'cute-writeback']
+      : profiled.resolved_skill_chain,
+    requires_dispatch: intent.is_audit_intent ? true : profiled.requires_dispatch,
+    explicit_mode: input.explicit_mode !== false,
     governance_signal: intent.should_consider_cutepower,
   };
 }
@@ -211,36 +230,79 @@ function extractAuthorization(input = {}) {
   };
 }
 
-function resolveRoute(taskProfile, authorization) {
-  if (
-    taskProfile.explicit_mode
-    && taskProfile.requested_capability === 'functional_audit_read_only'
-  ) {
+function resolveRoute(taskProfile, authorization, docs = loadContracts()) {
+  const runtimeEntry = docs['task-normalization'].activation.runtime_entry;
+  if (!taskProfile || !taskProfile.route_id) {
     return {
-      route_id: 'explicit_read_only_functional_audit',
-      phase: 'evidence_collection',
-      allowed_actions: authorization.user_explicitly_authorized
-        ? [
-            'runtime_discovery_read',
-            'authorized_business_context_read',
-          ]
-        : ['runtime_discovery_read'],
-      required_artifacts: ['task_profile', 'route_resolution', 'runtime_gate'],
+      route_id: 'declined_general_execution',
+      phase: 'intake',
+      allowed_actions: ['runtime_discovery_read'],
+      required_artifacts: ['task_profile'],
+      skill_chain: [],
+      dispatcher_skill: runtimeEntry.mandatory_dispatcher_skill,
     };
   }
 
+  const route = docs['routing-table'].routes.find((entry) => entry.route_id === taskProfile.route_id);
+  const skillRoute = docs['skill-route-matrix'].routes.find((entry) => entry.route_id === taskProfile.route_id);
+  const isReadOnlyAudit = taskProfile.primary_type === 'audit' && taskProfile.task_modifiers.includes('read_only');
+  const phase = skillRoute && skillRoute.ordered_skills.length > 0
+    ? skillRoute.ordered_skills[0].phase
+    : (route.required_gates[0] || 'analysis');
+
+  const allowedActions = isReadOnlyAudit
+    ? (
+      authorization.user_explicitly_authorized
+        ? ['runtime_discovery_read', 'authorized_business_context_read']
+        : ['runtime_discovery_read']
+    )
+    : route.required_gates.includes('implementation')
+      ? ['runtime_discovery_read', 'authorized_business_context_read', 'repo_local_verification_exec']
+      : ['runtime_discovery_read', 'authorized_business_context_read'];
+
   return {
-    route_id: 'declined_general_execution',
-    phase: 'intake',
-    allowed_actions: ['runtime_discovery_read'],
-    required_artifacts: ['task_profile'],
+    route_id: route.route_id,
+    phase,
+    allowed_actions: allowedActions,
+    required_artifacts: ['task_profile', 'route_resolution', 'runtime_gate', runtimeEntry.dispatch_output],
+    skill_chain: route.skill_chain,
+    dispatcher_skill: skillRoute ? skillRoute.dispatcher_skill : runtimeEntry.mandatory_dispatcher_skill,
+    writeback_level: route.writeback_level,
+  };
+}
+
+function buildDispatchManifest({ sessionId, taskProfile, routeResolution, docs = loadContracts() }) {
+  const skillRoute = docs['skill-route-matrix'].routes.find((entry) => entry.route_id === routeResolution.route_id);
+  if (!skillRoute || skillRoute.ordered_skills.length === 0) {
+    return null;
+  }
+  const firstSkill = skillRoute.ordered_skills[0];
+  return {
+    session_id: sessionId,
+    route_id: routeResolution.route_id,
+    dispatcher_skill: skillRoute.dispatcher_skill,
+    current_phase: routeResolution.phase,
+    current_skill: skillRoute.dispatcher_skill,
+    next_skill: firstSkill.skill_id,
+    allowed_following_skills: skillRoute.ordered_skills.map((skill) => skill.skill_id),
+    required_artifacts_for_next_skill: firstSkill.required_artifacts_in,
+    completed_skills: [],
+    route_skill_chain: taskProfile.resolved_skill_chain || skillRoute.ordered_skills.map((skill) => skill.skill_id),
+    direct_entry_forbidden: true,
   };
 }
 
 function buildRuntimeGate(input = {}) {
-  const task_profile = normalizeTaskProfile(input);
+  const docs = loadContracts();
+  const task_profile = normalizeTaskProfile(input, docs);
   const authorization = extractAuthorization(input);
-  const route_resolution = resolveRoute(task_profile, authorization);
+  const route_resolution = resolveRoute(task_profile, authorization, docs);
+  const dispatch_manifest = buildDispatchManifest({
+    sessionId: input.session_id || input.sessionId || null,
+    taskProfile: task_profile,
+    routeResolution: route_resolution,
+    docs,
+  });
 
   const allowedPaths = authorization.allowed_paths.length > 0
     ? authorization.allowed_paths
@@ -251,6 +313,7 @@ function buildRuntimeGate(input = {}) {
       status: 'declined',
       task_profile,
       route_resolution,
+      dispatch_manifest,
       blocking_reasons: ['unsupported_task_profile_for_cutepower_route'],
       phase: 'intake',
       allowed_actions: route_resolution.allowed_actions,
@@ -266,27 +329,30 @@ function buildRuntimeGate(input = {}) {
       status: 'blocked',
       task_profile,
       route_resolution,
+      dispatch_manifest,
       blocking_reasons: ['explicit_authorization_for_project_read_missing'],
       phase: 'intake',
       allowed_actions: ['runtime_discovery_read'],
       allowed_paths: [],
       evidence_collection_mode: null,
-      capability: 'functional_audit_read_only',
+      capability: null,
       required_preflight_outputs: route_resolution.required_artifacts,
     };
   }
 
-  if (authorization.evidence_collection_mode !== 'read_only') {
+  const readOnlyRoute = task_profile.primary_type === 'audit' && task_profile.task_modifiers.includes('read_only');
+  if (readOnlyRoute && authorization.evidence_collection_mode !== 'read_only') {
     return {
       status: 'blocked',
       task_profile,
       route_resolution,
+      dispatch_manifest,
       blocking_reasons: ['read_only_evidence_collection_mode_required'],
       phase: 'intake',
       allowed_actions: ['runtime_discovery_read'],
       allowed_paths: [],
       evidence_collection_mode: null,
-      capability: 'functional_audit_read_only',
+      capability: null,
       required_preflight_outputs: route_resolution.required_artifacts,
     };
   }
@@ -296,11 +362,12 @@ function buildRuntimeGate(input = {}) {
     status: 'ready',
     task_profile,
     route_resolution,
+    dispatch_manifest,
     phase: route_resolution.phase,
     allowed_actions: route_resolution.allowed_actions,
     allowed_paths: allowedPaths,
-    evidence_collection_mode: 'read_only',
-    capability: 'functional_audit_read_only',
+    evidence_collection_mode: readOnlyRoute ? 'read_only' : 'implementation',
+    capability: readOnlyRoute ? 'functional_audit_read_only' : 'governed_route_execution',
     authorization,
     required_preflight_outputs: route_resolution.required_artifacts,
   };
@@ -338,6 +405,7 @@ function persistPreflightArtifacts(input = {}, runtimeGate) {
   const artifactRoot = path.join(workspaceRoot, '.cutepower');
   const taskProfilePath = writeArtifact(artifactRoot, sessionId, 'task_profile', runtimeGate.task_profile);
   const routeResolutionPath = writeArtifact(artifactRoot, sessionId, 'route_resolution', runtimeGate.route_resolution);
+  const dispatchManifestPath = writeArtifact(artifactRoot, sessionId, 'dispatch_manifest', runtimeGate.dispatch_manifest || {});
   const runtimeGatePath = writeArtifact(
     artifactRoot,
     sessionId,
@@ -355,6 +423,7 @@ function persistPreflightArtifacts(input = {}, runtimeGate) {
     persisted_artifacts: {
       task_profile: fs.existsSync(taskProfilePath),
       route_resolution: fs.existsSync(routeResolutionPath),
+      dispatch_manifest: fs.existsSync(dispatchManifestPath),
       runtime_gate: fs.existsSync(runtimeGatePath),
     },
   };
@@ -376,6 +445,7 @@ function evaluateIntake(input = {}) {
   const requiredArtifacts = runtimeGate.required_preflight_outputs || [
     'task_profile',
     'route_resolution',
+    'dispatch_manifest',
     'runtime_gate',
   ];
   const missingArtifacts = requiredArtifacts.filter((name) => !persisted.persisted_artifacts[name]);
@@ -412,6 +482,7 @@ function evaluateIntake(input = {}) {
     diagnostics: {
       task_profile: runtimeGate.task_profile,
       route_resolution: runtimeGate.route_resolution,
+      dispatch_manifest: runtimeGate.dispatch_manifest,
       runtime_gate_status: runtimeGate.status,
       blocking_reasons: runtimeGate.blocking_reasons || [],
       artifact_dir: persisted.artifact_dir,
@@ -435,4 +506,5 @@ module.exports = {
   persistPreflightArtifacts,
   resolveRoute,
   resolveWorkspaceRoot,
+  buildDispatchManifest,
 };

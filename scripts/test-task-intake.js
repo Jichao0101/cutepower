@@ -18,8 +18,9 @@ function testExplicitReadOnlyAuditGetsReadyGateWithAuthorization() {
     },
   });
   assert.equal(gate.status, 'ready');
-  assert.equal(gate.route_resolution.route_id, 'explicit_read_only_functional_audit');
+  assert.equal(gate.route_resolution.route_id, 'audit_functional_read_only');
   assert.equal(gate.capability, 'functional_audit_read_only');
+  assert.equal(gate.dispatch_manifest.next_skill, 'cute-scope-plan');
 }
 
 function testChineseAuditPromptRoutesToReadOnlyCapability() {
@@ -42,12 +43,12 @@ function testChineseAuditPromptRoutesToReadOnlyCapability() {
       },
     });
     assert.equal(gate.status, 'ready');
-    assert.equal(gate.route_resolution.route_id, 'explicit_read_only_functional_audit');
+    assert.equal(gate.route_resolution.route_id, 'audit_functional_read_only');
     assert.equal(gate.capability, 'functional_audit_read_only');
   }
 }
 
-function testLegacyRuntimeRepairPromptNoLongerRoutesAsPrimaryCapability() {
+function testLegacyRuntimeRepairPromptUsesGovernedImplementationRoute() {
   const prompts = [
     '请按cutepower修复 legacy runtime 集成问题并恢复宿主兼容性',
     '修复 legacy runtime 与宿主兼容问题',
@@ -63,9 +64,9 @@ function testLegacyRuntimeRepairPromptNoLongerRoutesAsPrimaryCapability() {
         allowed_paths: ['contracts/', 'scripts/', 'docs/'],
       },
     });
-    assert.equal(gate.status, 'declined');
-    assert.equal(gate.route_resolution.route_id, 'declined_general_execution');
-    assert.equal(gate.capability, null);
+    assert.equal(gate.status, 'ready');
+    assert.equal(gate.route_resolution.route_id, 'bug_fix_default');
+    assert.equal(gate.capability, 'governed_route_execution');
   }
 }
 
@@ -96,15 +97,31 @@ function testEvaluateIntakePersistsRequiredPreflightArtifacts() {
   assert.equal(verdict.gate_result, 'ready');
   assert.equal(fs.existsSync(path.join(repoRoot, '.cutepower', 'run', 's-intake', 'task_profile.json')), true);
   assert.equal(fs.existsSync(path.join(repoRoot, '.cutepower', 'run', 's-intake', 'route_resolution.json')), true);
+  assert.equal(fs.existsSync(path.join(repoRoot, '.cutepower', 'run', 's-intake', 'dispatch_manifest.json')), true);
   assert.equal(fs.existsSync(path.join(repoRoot, '.cutepower', 'run', 's-intake', 'runtime_gate.json')), true);
+}
+
+function testGovernedImplementationRouteStillStartsAtDispatcher() {
+  const gate = buildRuntimeGate({
+    prompt: 'Fix the failing startup regression in the launcher and update the repo code.',
+    authorization: {
+      user_explicitly_authorized: true,
+      project_paths_authorized: true,
+      allowed_paths: ['contracts/', 'scripts/'],
+    },
+  });
+  assert.equal(gate.status, 'ready');
+  assert.equal(gate.dispatch_manifest.current_skill, 'using-cutepower');
+  assert.equal(gate.dispatch_manifest.next_skill, 'cute-scope-plan');
 }
 
 function run() {
   testExplicitReadOnlyAuditGetsReadyGateWithAuthorization();
   testChineseAuditPromptRoutesToReadOnlyCapability();
-  testLegacyRuntimeRepairPromptNoLongerRoutesAsPrimaryCapability();
+  testLegacyRuntimeRepairPromptUsesGovernedImplementationRoute();
   testGeneralPromptDoesNotRequestCutepowerGovernance();
   testEvaluateIntakePersistsRequiredPreflightArtifacts();
+  testGovernedImplementationRouteStillStartsAtDispatcher();
   process.stdout.write('test-task-intake: ok\n');
 }
 

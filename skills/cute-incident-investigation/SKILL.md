@@ -1,47 +1,59 @@
 ---
 name: cute-incident-investigation
-description: Run cutepower P1 incident investigation from symptoms and artifacts, produce testable hypotheses, orchestrate reruns and probes, and route follow-up work without taking repo-write or final review authority.
+description: Investigate governed incidents, produce route decisions, and hand off follow-up work without taking repo-write or final review authority.
 ---
+
+# Goal
+
+Produce a testable incident route decision and evidence plan.
 
 # Contracts
 
 - `role-contracts`
 - `gate-matrix`
 - `routing-table`
-- `writeback-levels`
+- `skill-route-matrix`
 
-# Input
+# When This Skill Is Legal
 
-- `observed_symptoms`
-- `artifact_inventory`
-- `log_sources`
-- `trigger_condition`
-- `reproduction_confidence`
-- `environment_fingerprint`
-- `board_target` or `no_board_execution`
-- `repo_scope`
-- `verification_tier`
+- Only when `dispatch_manifest.next_skill` is `cute-incident-investigation`.
+- Only after scope planning has produced an investigation package.
 
-# Output
+# Required Input Artifacts
+
+- `task_profile`
+- `route_resolution`
+- `dispatch_manifest`
+- `runtime_gate`
+- investigation package
+
+# Workflow
+
+1. Build hypotheses from symptoms and artifacts.
+2. Identify the minimum probe or rerun path.
+3. Route to board evidence, repo change, functional review, or writeback as needed.
+4. Update the handoff package with the next required skill.
+
+# Required Outputs
 
 - `hypothesis_set`
 - `evidence_gaps`
 - `probe_plan`
-- `rerun_summary`
 - `route_decision`
-- `next_required_skill`
+- `dispatch_manifest`
 
-# Workflow
+# Phase Exit / Next Skill
 
-1. Build hypotheses from symptoms and available artifacts.
-2. Identify evidence gaps and the minimum rerun or probe path.
-3. Use `cute-board-run` when reproduction or artifact recollection is required.
-4. If debug-only repo instrumentation is needed, request `cute-repo-change`; do not write the repo directly.
-5. Handoff to `cute-code-review` after any repo change, to `cute-functional-review` when behavior or interface adjudication is required, or to `cute-writeback` for low-level incident closure.
+- Exit to the next routed skill declared by the investigation decision.
+
+# Stop Conditions
+
+- missing initial evidence
+- missing route decision
+- unresolved probe scope
 
 # Do Not Do
 
 - Do not edit repository files directly.
-- Do not declare a candidate fix as passed.
-- Do not emit the final review decision.
-- Do not choose a writeback level above what the writeback contract allows.
+- Do not emit final review decisions.
+- Do not choose a writeback level above contract allowance.

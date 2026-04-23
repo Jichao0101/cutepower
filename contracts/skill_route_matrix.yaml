@@ -1,0 +1,348 @@
+{
+  "schema": "cutepower.skill-route-matrix/v1",
+  "routes": [
+    {
+      "route_id": "implementation_default",
+      "dispatcher_skill": "using-cutepower",
+      "ordered_skills": [
+        {
+          "skill_id": "cute-scope-plan",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": [
+            "using-cutepower"
+          ],
+          "required_artifacts_in": [
+            "task_profile",
+            "route_resolution",
+            "runtime_gate",
+            "dispatch_manifest"
+          ],
+          "required_artifacts_out": [
+            "dispatch_manifest"
+          ]
+        },
+        {
+          "skill_id": "cute-repo-change",
+          "phase": "implementation",
+          "allow_direct_entry": false,
+          "allowed_predecessors": [
+            "cute-scope-plan"
+          ],
+          "required_artifacts_in": [
+            "task_profile",
+            "route_resolution",
+            "runtime_gate",
+            "dispatch_manifest"
+          ],
+          "required_artifacts_out": [
+            "dispatch_manifest"
+          ]
+        },
+        {
+          "skill_id": "cute-code-review",
+          "phase": "review",
+          "allow_direct_entry": false,
+          "allowed_predecessors": [
+            "cute-repo-change"
+          ],
+          "required_artifacts_in": [
+            "task_profile",
+            "route_resolution",
+            "runtime_gate",
+            "dispatch_manifest"
+          ],
+          "required_artifacts_out": [
+            "dispatch_manifest",
+            "review_decision"
+          ]
+        },
+        {
+          "skill_id": "cute-writeback",
+          "phase": "writeback",
+          "allow_direct_entry": false,
+          "allowed_predecessors": [
+            "cute-code-review"
+          ],
+          "required_artifacts_in": [
+            "task_profile",
+            "route_resolution",
+            "runtime_gate",
+            "dispatch_manifest",
+            "review_decision"
+          ],
+          "required_artifacts_out": [
+            "writeback_receipt",
+            "writeback_declined"
+          ]
+        }
+      ]
+    },
+    {
+      "route_id": "implementation_board_validation",
+      "dispatcher_skill": "using-cutepower",
+      "ordered_skills": [
+        {
+          "skill_id": "cute-scope-plan",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["using-cutepower"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-repo-change",
+          "phase": "implementation",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-scope-plan"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-board-run",
+          "phase": "implementation",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-repo-change"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest", "evidence_manifest"]
+        },
+        {
+          "skill_id": "cute-code-review",
+          "phase": "review",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-board-run"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest", "evidence_manifest"],
+          "required_artifacts_out": ["dispatch_manifest", "review_decision"]
+        },
+        {
+          "skill_id": "cute-writeback",
+          "phase": "writeback",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-code-review"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest", "review_decision"],
+          "required_artifacts_out": ["writeback_receipt", "writeback_declined"]
+        }
+      ]
+    },
+    {
+      "route_id": "bug_fix_default",
+      "dispatcher_skill": "using-cutepower",
+      "ordered_skills": [
+        {
+          "skill_id": "cute-scope-plan",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["using-cutepower"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-repo-change",
+          "phase": "implementation",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-scope-plan"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-code-review",
+          "phase": "review",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-repo-change"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest", "review_decision"]
+        },
+        {
+          "skill_id": "cute-writeback",
+          "phase": "writeback",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-code-review"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest", "review_decision"],
+          "required_artifacts_out": ["writeback_receipt", "writeback_declined"]
+        }
+      ]
+    },
+    {
+      "route_id": "bug_fix_board_validation",
+      "dispatcher_skill": "using-cutepower",
+      "ordered_skills": [
+        {
+          "skill_id": "cute-scope-plan",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["using-cutepower"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-repo-change",
+          "phase": "implementation",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-scope-plan"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-board-run",
+          "phase": "implementation",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-repo-change"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest", "evidence_manifest"]
+        },
+        {
+          "skill_id": "cute-code-review",
+          "phase": "review",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-board-run"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest", "evidence_manifest"],
+          "required_artifacts_out": ["dispatch_manifest", "review_decision"]
+        },
+        {
+          "skill_id": "cute-writeback",
+          "phase": "writeback",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-code-review"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest", "review_decision"],
+          "required_artifacts_out": ["writeback_receipt", "writeback_declined"]
+        }
+      ]
+    },
+    {
+      "route_id": "audit_functional_read_only",
+      "dispatcher_skill": "using-cutepower",
+      "ordered_skills": [
+        {
+          "skill_id": "cute-scope-plan",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["using-cutepower"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-functional-review",
+          "phase": "review",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-scope-plan"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest", "review_decision"]
+        },
+        {
+          "skill_id": "cute-writeback",
+          "phase": "writeback",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-functional-review"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest", "review_decision"],
+          "required_artifacts_out": ["writeback_receipt", "writeback_declined"]
+        }
+      ]
+    },
+    {
+      "route_id": "audit_functional_board",
+      "dispatcher_skill": "using-cutepower",
+      "ordered_skills": [
+        {
+          "skill_id": "cute-scope-plan",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["using-cutepower"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-board-run",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-scope-plan"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest", "evidence_manifest"]
+        },
+        {
+          "skill_id": "cute-functional-review",
+          "phase": "review",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-board-run"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest", "evidence_manifest"],
+          "required_artifacts_out": ["dispatch_manifest", "review_decision"]
+        },
+        {
+          "skill_id": "cute-writeback",
+          "phase": "writeback",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-functional-review"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest", "review_decision"],
+          "required_artifacts_out": ["writeback_receipt", "writeback_declined"]
+        }
+      ]
+    },
+    {
+      "route_id": "incident_investigation_default",
+      "dispatcher_skill": "using-cutepower",
+      "ordered_skills": [
+        {
+          "skill_id": "cute-scope-plan",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["using-cutepower"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-incident-investigation",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-scope-plan"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest", "evidence_manifest"]
+        },
+        {
+          "skill_id": "cute-writeback",
+          "phase": "writeback",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-incident-investigation", "cute-code-review", "cute-functional-review"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["writeback_receipt", "writeback_declined"]
+        }
+      ]
+    },
+    {
+      "route_id": "incident_investigation_board",
+      "dispatcher_skill": "using-cutepower",
+      "ordered_skills": [
+        {
+          "skill_id": "cute-scope-plan",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["using-cutepower"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-incident-investigation",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-scope-plan"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest"]
+        },
+        {
+          "skill_id": "cute-board-run",
+          "phase": "analysis",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-incident-investigation", "cute-repo-change"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["dispatch_manifest", "evidence_manifest"]
+        },
+        {
+          "skill_id": "cute-writeback",
+          "phase": "writeback",
+          "allow_direct_entry": false,
+          "allowed_predecessors": ["cute-board-run", "cute-functional-review", "cute-code-review"],
+          "required_artifacts_in": ["task_profile", "route_resolution", "runtime_gate", "dispatch_manifest"],
+          "required_artifacts_out": ["writeback_receipt", "writeback_declined"]
+        }
+      ]
+    }
+  ]
+}

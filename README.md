@@ -61,6 +61,7 @@ Installed-plugin boundaries:
 - `scripts/validate-contracts.js` provides static contract validation
 - `scripts/task-profile.js` provides natural-language task normalization into a routed task profile
 - `scripts/task-intake.js` provides the default-entry intake/preflight layer, allocates `session_id`, writes repo-local preflight artifacts under `.cutepower/run/<session_id>/`, and blocks takeover when the minimum preflight set cannot be established
+- `contracts/skill_route_matrix.yaml` defines route-to-skill order, skill entry legality, and required handoff artifacts
 - `scripts/host-runtime.js` provides host-side explicit-mode session-context injection, loads persisted runtime gate state, and issues session capabilities bound to `session_id`, `route_id`, `phase`, and `allowed_actions`
 - `scripts/runtime-gates.js` provides action-front runtime admission checks for route, capability, phase, and artifact existence using repo-local run artifacts as the runtime source of truth
 - `scripts/run-artifacts.js` manages repo-local run-state artifacts and schema validation
@@ -99,6 +100,7 @@ Run-state model:
 - stable runtime artifacts include:
   - `task_profile.json`
   - `route_resolution.json`
+  - `dispatch_manifest.json`
   - `runtime_gate.json`
   - `context_requirements.json`
   - `blocking_gaps.json`
@@ -120,8 +122,16 @@ node scripts/test-install-plugin.js
 node scripts/test-uninstall-plugin.js
 node scripts/test-host-runtime.js
 node scripts/validate-contracts.js
+node scripts/test-skill-routing.js
+node scripts/test-skill-docs.js
 node scripts/test-runtime-gates.js
 node scripts/test-task-profile.js
 node scripts/test-task-intake.js
 node scripts/run-artifacts.js status .cutepower/run/<session_id>
 ```
+
+Workflow map:
+
+- dispatcher-first entry is `using-cutepower`
+- governed route order lives in `contracts/routing-table.yaml` and `contracts/skill_route_matrix.yaml`
+- human-readable workflow overview lives in [docs/skill-workflow-map.md](docs/skill-workflow-map.md)

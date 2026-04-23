@@ -77,6 +77,7 @@ function main() {
   const reviewTypes = new Set(docs["review-boundaries"].review_types.map((reviewType) => reviewType.review_type));
   const levels = new Set(docs["writeback-levels"].levels.map((level) => level.level_id));
   const routeIds = new Set(docs["routing-table"].routes.map((route) => route.route_id));
+  const skillRouteIds = new Set((docs["skill-route-matrix"]?.routes || []).map((route) => route.route_id));
   const passStatuses = new Set(docs["writeback-levels"].pass_statuses.map((passStatus) => passStatus.pass_id));
 
   ensureUnique("role ids", [...roles]);
@@ -102,12 +103,15 @@ function main() {
   ensureArray("task-normalization.activation.autostart_primary_types", docs["task-normalization"].activation.autostart_primary_types);
   ensureArray("task-normalization.activation.engineering_signal_terms", docs["task-normalization"].activation.engineering_signal_terms);
   ensureKeys("task-normalization.activation.runtime_entry", docs["task-normalization"].activation.runtime_entry, [
+    "mandatory_dispatcher_skill",
     "intake_script",
     "route_resolution_output",
     "blocking_gaps_output",
     "runtime_gate_output",
+    "dispatch_output",
     "protected_execution_skills"
   ]);
+  ensureSkillExists(docs["task-normalization"].activation.runtime_entry.mandatory_dispatcher_skill);
   ensurePluginPathExists(docs["task-normalization"].activation.runtime_entry.intake_script, "task-normalization runtime intake script");
   ensureArray(
     "task-normalization.activation.runtime_entry.protected_execution_skills",
@@ -372,6 +376,61 @@ function main() {
             throw new Error(`routing-table conditional handoff references unknown gate/state: ${route.route_id} -> ${state}`);
           }
         }
+      }
+    }
+  }
+
+  ensureArray("skill-route-matrix.routes", docs["skill-route-matrix"].routes);
+  for (const route of docs["routing-table"].routes) {
+    if (!skillRouteIds.has(route.route_id)) {
+      throw new Error(`skill-route-matrix missing route: ${route.route_id}`);
+    }
+  }
+  const protectedSkills = new Set(docs["task-normalization"].activation.runtime_entry.protected_execution_skills);
+  for (const route of docs["skill-route-matrix"].routes) {
+    ensureKeys(`skill-route-matrix.${route.route_id}`, route, [
+      "route_id",
+      "dispatcher_skill",
+      "ordered_skills"
+    ]);
+    if (!routeIds.has(route.route_id)) {
+      throw new Error(`skill-route-matrix references unknown route: ${route.route_id}`);
+    }
+    ensureSkillExists(route.dispatcher_skill);
+    ensureArray(`skill-route-matrix.${route.route_id}.ordered_skills`, route.ordered_skills);
+    const routingRoute = docs["routing-table"].routes.find((entry) => entry.route_id === route.route_id);
+    const orderedSkillIds = route.ordered_skills.map((entry) => entry.skill_id);
+    if (JSON.stringify(orderedSkillIds) !== JSON.stringify(routingRoute.skill_chain)) {
+      throw new Error(`skill-route-matrix skill order mismatch for route: ${route.route_id}`);
+    }
+    for (let index = 0; index < route.ordered_skills.length; index += 1) {
+      const skill = route.ordered_skills[index];
+      ensureKeys(`skill-route-matrix.${route.route_id}.${skill.skill_id}`, skill, [
+        "skill_id",
+        "phase",
+        "allow_direct_entry",
+        "allowed_predecessors",
+        "required_artifacts_in",
+        "required_artifacts_out"
+      ]);
+      ensureSkillExists(skill.skill_id);
+      ensureArray(`skill-route-matrix.${route.route_id}.${skill.skill_id}.allowed_predecessors`, skill.allowed_predecessors);
+      ensureArray(`skill-route-matrix.${route.route_id}.${skill.skill_id}.required_artifacts_in`, skill.required_artifacts_in);
+      ensureArray(`skill-route-matrix.${route.route_id}.${skill.skill_id}.required_artifacts_out`, skill.required_artifacts_out);
+      if (!states.has(skill.phase)) {
+        throw new Error(`skill-route-matrix references unknown phase/state: ${route.route_id} -> ${skill.skill_id} -> ${skill.phase}`);
+      }
+      if (skill.allow_direct_entry !== false) {
+        throw new Error(`skill-route-matrix may not allow direct governed entry: ${route.route_id} -> ${skill.skill_id}`);
+      }
+      if (!protectedSkills.has(skill.skill_id)) {
+        throw new Error(`task-normalization protected_execution_skills missing governed skill: ${skill.skill_id}`);
+      }
+      const expectedPredecessor = index === 0
+        ? route.dispatcher_skill
+        : route.ordered_skills[index - 1].skill_id;
+      if (!skill.allowed_predecessors.includes(expectedPredecessor)) {
+        throw new Error(`skill-route-matrix predecessor mismatch: ${route.route_id} -> ${skill.skill_id}`);
       }
     }
   }

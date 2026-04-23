@@ -24,12 +24,13 @@ function testBuildHostRuntimeCarriesArtifactContract() {
       allowed_paths: ['contracts/', 'scripts/'],
     },
   });
-  assert.equal(runtime.route_id, 'explicit_read_only_functional_audit');
-  assert.equal(runtime.phase, 'evidence_collection');
+  assert.equal(runtime.route_id, 'audit_functional_read_only');
+  assert.equal(runtime.phase, 'analysis');
   assert.deepEqual(runtime.required_preflight_outputs, [
     'task_profile',
     'route_resolution',
     'runtime_gate',
+    'dispatch_manifest',
   ]);
 }
 
@@ -37,8 +38,8 @@ function testCoerceHostRuntimePreservesReadOnlyAuditCapability() {
   const runtime = coerceHostRuntime({
     host_runtime: {
       session_id: 's-coerce',
-      route_id: 'explicit_read_only_functional_audit',
-      phase: 'evidence_collection',
+      route_id: 'audit_functional_read_only',
+      phase: 'analysis',
       capability: 'functional_audit_read_only',
       allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
       allowed_paths: ['contracts/', 'scripts/'],
@@ -49,7 +50,7 @@ function testCoerceHostRuntimePreservesReadOnlyAuditCapability() {
   assert.equal(runtime.evidence_collection_mode, 'read_only');
 }
 
-function testBuildHostRuntimeDoesNotPromoteLegacyRuntimeRepairPrompt() {
+function testBuildHostRuntimeRoutesLegacyRuntimeRepairAsGovernedImplementation() {
   const runtime = buildHostRuntime({
     session_id: 's-fix',
     prompt: 'codex runtime integration fix for explicit cutepower mode',
@@ -59,9 +60,9 @@ function testBuildHostRuntimeDoesNotPromoteLegacyRuntimeRepairPrompt() {
       allowed_paths: ['contracts/', 'scripts/', 'docs/'],
     },
   });
-  assert.equal(runtime.route_id, 'declined_general_execution');
-  assert.equal(runtime.phase, 'intake');
-  assert.equal(runtime.capability, null);
+  assert.equal(runtime.route_id, 'bug_fix_default');
+  assert.equal(runtime.phase, 'analysis');
+  assert.equal(runtime.capability, 'governed_route_execution');
 }
 
 function testBuildHostRuntimeMarksNonGovernanceInputAsUnmanaged() {
@@ -86,7 +87,7 @@ function testBuildSessionCapabilityOnlyForReadyManagedRuntime() {
   });
   const capability = buildSessionCapability(runtime);
   assert.equal(capability.session_id, 's-cap');
-  assert.equal(capability.route_id, 'explicit_read_only_functional_audit');
+  assert.equal(capability.route_id, 'audit_functional_read_only');
   assert.equal(validateSessionCapability(runtime, capability).valid, true);
 }
 
@@ -95,27 +96,27 @@ function testCoerceHostRuntimeLoadsPersistedRuntimeGate() {
   writeArtifact(path.join(workspaceRoot, '.cutepower'), 's-persisted', 'runtime_gate', {
     status: 'ready',
     route_resolution: {
-      route_id: 'explicit_read_only_functional_audit',
-      phase: 'evidence_collection',
+      route_id: 'audit_functional_read_only',
+      phase: 'analysis',
     },
-    phase: 'evidence_collection',
+    phase: 'analysis',
     capability: 'functional_audit_read_only',
     allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
     allowed_paths: ['scripts/'],
-    required_preflight_outputs: ['task_profile', 'route_resolution', 'runtime_gate'],
+    required_preflight_outputs: ['task_profile', 'route_resolution', 'dispatch_manifest', 'runtime_gate'],
   });
   const runtime = coerceHostRuntime({
     session_id: 's-persisted',
     cwd: workspaceRoot,
   });
-  assert.equal(runtime.route_id, 'explicit_read_only_functional_audit');
+  assert.equal(runtime.route_id, 'audit_functional_read_only');
   assert.equal(runtime.runtime_gate_status, 'ready');
 }
 
 function run() {
   testBuildHostRuntimeCarriesArtifactContract();
   testCoerceHostRuntimePreservesReadOnlyAuditCapability();
-  testBuildHostRuntimeDoesNotPromoteLegacyRuntimeRepairPrompt();
+  testBuildHostRuntimeRoutesLegacyRuntimeRepairAsGovernedImplementation();
   testBuildHostRuntimeMarksNonGovernanceInputAsUnmanaged();
   testBuildSessionCapabilityOnlyForReadyManagedRuntime();
   testCoerceHostRuntimeLoadsPersistedRuntimeGate();

@@ -48,10 +48,12 @@
     ],
     "fallback_behavior": "fallback_when_cutepower_declines",
     "runtime_entry": {
+      "mandatory_dispatcher_skill": "using-cutepower",
       "intake_script": "scripts/task-intake.js",
       "route_resolution_output": "route_resolution",
       "blocking_gaps_output": "blocking_gaps",
       "runtime_gate_output": "runtime_gate",
+      "dispatch_output": "dispatch_manifest",
       "explicit_mode_keywords": [
         "cutepower",
         "按 cutepower",
@@ -72,9 +74,12 @@
         "project_current_update"
       ],
       "protected_execution_skills": [
+        "cute-scope-plan",
         "cute-repo-change",
         "cute-board-run",
         "cute-code-review",
+        "cute-functional-review",
+        "cute-incident-investigation",
         "cute-writeback"
       ]
     },
@@ -178,6 +183,11 @@
         "评审",
         "检查",
         "看一下",
+        "合规分析",
+        "符合性分析",
+        "设计文档",
+        "符合设计",
+        "满足设计文档",
         "read only",
         "只读"
       ],

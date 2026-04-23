@@ -18,22 +18,22 @@ function makeHostRuntime(overrides = {}) {
   return {
     session_id: 's-runtime',
     workspace_root: overrides.workspace_root || null,
-    route_id: 'explicit_read_only_functional_audit',
+    route_id: 'audit_functional_read_only',
     phase: 'evidence_collection',
     capability: 'functional_audit_read_only',
     evidence_collection_mode: 'read_only',
     allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
     allowed_paths: ['contracts/', 'scripts/'],
-    required_preflight_outputs: ['task_profile', 'route_resolution', 'runtime_gate'],
+    required_preflight_outputs: ['task_profile', 'route_resolution', 'dispatch_manifest', 'runtime_gate'],
     managed_by_cutepower: true,
     runtime_gate_status: 'ready',
     session_capability: {
       session_id: 's-runtime',
-      route_id: 'explicit_read_only_functional_audit',
+      route_id: 'audit_functional_read_only',
       phase: 'evidence_collection',
       capability: 'functional_audit_read_only',
       allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
-      required_artifacts: ['task_profile', 'route_resolution', 'runtime_gate'],
+      required_artifacts: ['task_profile', 'route_resolution', 'dispatch_manifest', 'runtime_gate'],
     },
     ...overrides,
   };
@@ -42,10 +42,17 @@ function makeHostRuntime(overrides = {}) {
 function seedPreflightArtifacts(workspaceRoot, sessionId, runtimeGateStatus = 'ready') {
   const artifactRoot = path.join(workspaceRoot, '.cutepower');
   writeArtifact(artifactRoot, sessionId, 'task_profile', { primary_type: 'functional_audit' });
-  writeArtifact(artifactRoot, sessionId, 'route_resolution', { route_id: 'explicit_read_only_functional_audit' });
+  writeArtifact(artifactRoot, sessionId, 'route_resolution', { route_id: 'audit_functional_read_only' });
+  writeArtifact(artifactRoot, sessionId, 'dispatch_manifest', {
+    session_id: sessionId,
+    route_id: 'audit_functional_read_only',
+    current_phase: 'evidence_collection',
+    current_skill: 'using-cutepower',
+    next_skill: 'cute-scope-plan',
+  });
   writeArtifact(artifactRoot, sessionId, 'runtime_gate', {
     status: runtimeGateStatus,
-    route_resolution: { route_id: 'explicit_read_only_functional_audit' },
+    route_resolution: { route_id: 'audit_functional_read_only' },
   });
 }
 
@@ -77,7 +84,7 @@ function testHighRiskToolDeniedWithoutCapability() {
 function testMissingRuntimeGateArtifactBlocksToolUse() {
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cutepower-runtime-'));
   writeArtifact(path.join(workspaceRoot, '.cutepower'), 's-runtime', 'task_profile', { primary_type: 'functional_audit' });
-  writeArtifact(path.join(workspaceRoot, '.cutepower'), 's-runtime', 'route_resolution', { route_id: 'explicit_read_only_functional_audit' });
+  writeArtifact(path.join(workspaceRoot, '.cutepower'), 's-runtime', 'route_resolution', { route_id: 'audit_functional_read_only' });
   const result = evaluateToolUseVerdict({
     payload: {
       command: 'sed -n 1,10p contracts/gate-matrix.yaml',
@@ -111,7 +118,7 @@ function testBlockedReviewCanClose() {
   seedPreflightArtifacts(workspaceRoot, 's-runtime');
   const artifacts = buildBlockedTerminalArtifacts({
     sessionId: 's-runtime',
-    routeId: 'explicit_read_only_functional_audit',
+    routeId: 'audit_functional_read_only',
     blockedReason: 'runtime_integration_defect',
   });
   const result = evaluateStopGate({
@@ -374,6 +381,22 @@ function testMetadataRiskInferenceDeniesMutatingAction() {
   assert.equal(result.diagnostics.inferred_action.inference_source, 'metadata');
 }
 
+function testGovernedSkillOrderMismatchBlocked() {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cutepower-runtime-'));
+  seedPreflightArtifacts(workspaceRoot, 's-runtime');
+  const result = evaluateToolUseVerdict({
+    payload: {
+      command: 'sed -n 1,10p contracts/gate-matrix.yaml',
+      skill_name: 'cute-code-review',
+    },
+    hostRuntime: makeHostRuntime({
+      workspace_root: workspaceRoot,
+    }),
+  });
+  assert.equal(result.gate_result, 'blocked');
+  assert.equal(result.reason, 'governed_skill_out_of_route_order');
+}
+
 function testMetadataRiskInferenceAllowsLowRiskRead() {
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cutepower-runtime-'));
   seedPreflightArtifacts(workspaceRoot, 's-runtime');
@@ -438,6 +461,7 @@ function run() {
   testFunctionalReviewCannotCompleteWithoutEvidenceManifest();
   testFunctionalReviewGapPreventsApprovedCompletion();
   testEvidenceWithoutAcceptanceMappingDoesNotCountAsPass();
+  testGovernedSkillOrderMismatchBlocked();
   testMetadataRiskInferenceDeniesMutatingAction();
   testMetadataRiskInferenceAllowsLowRiskRead();
   testFallbackCommandRiskInferenceStillDeniesHighRiskExec();

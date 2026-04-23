@@ -129,6 +129,17 @@ function resolveRoute(primaryType, taskModifiers, docs) {
   };
 }
 
+function resolveSkillRoute(routeId, docs) {
+  if (!routeId) {
+    return null;
+  }
+  const matrix = docs["skill-route-matrix"];
+  if (!matrix || !Array.isArray(matrix.routes)) {
+    return null;
+  }
+  return matrix.routes.find((route) => route.route_id === routeId) || null;
+}
+
 function inferContextFields(request, primaryType, taskModifiers, contract) {
   const text = normalizeText(request.task_goal);
   const modifierSet = new Set(taskModifiers || []);
@@ -192,6 +203,7 @@ function buildTaskProfile(request, docs = loadContracts()) {
     modifierResult.task_modifiers,
     normalization
   );
+  const skillRoute = resolveSkillRoute(routeResult.route_id, docs);
 
   return {
     entry_skill: normalization.activation.entry_skill,
@@ -201,6 +213,12 @@ function buildTaskProfile(request, docs = loadContracts()) {
     task_modifiers: modifierResult.task_modifiers,
     route_id: routeResult.route_id,
     route_status: routeResult.route_status,
+    resolved_skill_chain: skillRoute ? skillRoute.ordered_skills.map((skill) => skill.skill_id) : [],
+    requires_dispatch: Boolean(routeResult.route_id),
+    route_reasoning: {
+      matched_route_modifiers: routeResult.route ? routeResult.route.modifiers || [] : [],
+      dispatcher_skill: skillRoute ? skillRoute.dispatcher_skill : normalization.activation.entry_skill,
+    },
     inferred_context: contextResult.context,
     missing_context: contextResult.missing_context,
     requires_clarification:

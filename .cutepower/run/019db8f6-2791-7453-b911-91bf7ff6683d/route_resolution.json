@@ -1,0 +1,12 @@
+{
+  "route_id": "explicit_hook_integration_fix",
+  "phase": "implementation",
+  "allowed_actions": [
+    "runtime_discovery_read"
+  ],
+  "required_artifacts": [
+    "task_profile",
+    "route_resolution",
+    "runtime_gate"
+  ]
+}

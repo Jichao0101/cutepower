@@ -2,9 +2,17 @@
 
 const fs = require("fs");
 const path = require("path");
-const { loadContracts } = require("./runtime-gates");
 
 const pluginRoot = path.resolve(__dirname, "..");
+
+function loadContracts() {
+  const index = JSON.parse(fs.readFileSync(path.join(pluginRoot, "contracts", "contract-index.yaml"), "utf8"));
+  const docs = {};
+  for (const entry of index.contracts || []) {
+    docs[entry.id] = JSON.parse(fs.readFileSync(path.join(pluginRoot, entry.path), "utf8"));
+  }
+  return docs;
+}
 
 function profileError(message, context = {}) {
   const error = new Error(message);
@@ -233,6 +241,7 @@ if (require.main === module) {
 
 module.exports = {
   buildTaskProfile,
+  loadContracts,
   inferPrimaryType,
   inferModifiers,
   resolveRoute

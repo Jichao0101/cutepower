@@ -1,0 +1,47 @@
+{
+  "status": "blocked",
+  "task_profile": {
+    "primary_type": "hook_integration_fix",
+    "task_modifiers": [
+      "implementation",
+      "verification"
+    ],
+    "explicit_mode": true,
+    "requested_capability": "hook_integration_fix",
+    "requested_outputs": [
+      "task_profile",
+      "route_resolution",
+      "runtime_gate"
+    ],
+    "governance_signal": true
+  },
+  "route_resolution": {
+    "route_id": "explicit_hook_integration_fix",
+    "phase": "implementation",
+    "allowed_actions": [
+      "runtime_discovery_read"
+    ],
+    "required_artifacts": [
+      "task_profile",
+      "route_resolution",
+      "runtime_gate"
+    ]
+  },
+  "blocking_reasons": [
+    "explicit_authorization_for_project_read_missing"
+  ],
+  "phase": "intake",
+  "allowed_actions": [
+    "runtime_discovery_read"
+  ],
+  "allowed_paths": [],
+  "evidence_collection_mode": null,
+  "capability": "hook_integration_fix",
+  "required_preflight_outputs": [
+    "task_profile",
+    "route_resolution",
+    "runtime_gate"
+  ],
+  "session_id": "019db8f6-2791-7453-b911-91bf7ff6683d",
+  "artifact_dir": "/mnt/d/cutepower/.cutepower/run/019db8f6-2791-7453-b911-91bf7ff6683d"
+}

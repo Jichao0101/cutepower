@@ -1,0 +1,15 @@
+{
+  "primary_type": "hook_integration_fix",
+  "task_modifiers": [
+    "implementation",
+    "verification"
+  ],
+  "explicit_mode": true,
+  "requested_capability": "hook_integration_fix",
+  "requested_outputs": [
+    "task_profile",
+    "route_resolution",
+    "runtime_gate"
+  ],
+  "governance_signal": true
+}

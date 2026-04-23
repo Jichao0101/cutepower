@@ -81,112 +81,6 @@ function writeJson(filePath, value, dryRun) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
-function matchesCutepowerHookCommand(command, matchers) {
-  if (typeof command !== 'string') {
-    return false;
-  }
-  if (matchers.commands.has(command)) {
-    return true;
-  }
-  return Array.from(matchers.runnerPaths).some((runnerPath) => command.includes(runnerPath));
-}
-
-function buildHookMatchers(layout, manifest) {
-  const commands = new Set();
-  const runnerPaths = new Set([path.join(layout.installDir, 'scripts', 'codex-hooks.js')]);
-
-  for (const registration of manifest?.hook_registrations || []) {
-    if (registration.command) {
-      commands.add(registration.command);
-    }
-    if (registration.command && registration.command.includes('codex-hooks.js')) {
-      const match = registration.command.match(/"([^"]*codex-hooks\.js)"|([^ ]*codex-hooks\.js)/);
-      const runnerPath = match ? (match[1] || match[2]) : null;
-      if (runnerPath) {
-        runnerPaths.add(runnerPath);
-      }
-    }
-  }
-
-  return { commands, runnerPaths };
-}
-
-function pruneHookRegistrations(layout, manifest, dryRun) {
-  if (!fs.existsSync(layout.codexHooksPath)) {
-    return {
-      path: layout.codexHooksPath,
-      file_exists: false,
-      changed: false,
-      removed_hook_count: 0,
-      removed_entry_count: 0,
-      preserved_hook_count: 0,
-      affected_events: [],
-    };
-  }
-
-  const current = readJson(layout.codexHooksPath, { hooks: {} });
-  const next = {
-    ...current,
-    hooks: {},
-  };
-  let removedHookCount = 0;
-  let removedEntryCount = 0;
-  let preservedHookCount = 0;
-  const affectedEvents = [];
-  const matchers = buildHookMatchers(layout, manifest);
-
-  for (const [eventName, entries] of Object.entries(current.hooks || {})) {
-    const normalizedEntries = Array.isArray(entries) ? entries : [];
-    const nextEntries = [];
-
-    for (const entry of normalizedEntries) {
-      const hooks = Array.isArray(entry.hooks) ? entry.hooks : [];
-      const retainedHooks = hooks.filter((hook) => !matchesCutepowerHookCommand(hook.command, matchers));
-
-      if (retainedHooks.length !== hooks.length && !affectedEvents.includes(eventName)) {
-        affectedEvents.push(eventName);
-      }
-
-      removedHookCount += hooks.length - retainedHooks.length;
-      preservedHookCount += retainedHooks.length;
-
-      if (hooks.length > 0 && retainedHooks.length === 0) {
-        removedEntryCount += 1;
-        continue;
-      }
-
-      if (retainedHooks.length !== hooks.length) {
-        nextEntries.push({
-          ...entry,
-          hooks: retainedHooks,
-        });
-        continue;
-      }
-
-      nextEntries.push(entry);
-    }
-
-    if (nextEntries.length > 0) {
-      next.hooks[eventName] = nextEntries;
-    }
-  }
-
-  const changed = removedHookCount > 0;
-  if (changed) {
-    writeJson(layout.codexHooksPath, next, dryRun);
-  }
-
-  return {
-    path: layout.codexHooksPath,
-    file_exists: true,
-    changed,
-    removed_hook_count: removedHookCount,
-    removed_entry_count: removedEntryCount,
-    preserved_hook_count: preservedHookCount,
-    affected_events: affectedEvents,
-  };
-}
-
 function isInstalledMarketplaceEntry(plugin, layout) {
   return plugin
     && plugin.name === pluginName
@@ -228,57 +122,6 @@ function pruneMarketplaceEntry(layout, dryRun) {
   };
 }
 
-function revertConfigChanges(manifest, dryRun) {
-  const changes = Array.isArray(manifest?.config_changes) ? manifest.config_changes : [];
-  let removedConfigChanges = 0;
-  const touchedFiles = [];
-
-  for (const change of changes) {
-    if (!change || !change.file || !fs.existsSync(change.file)) {
-      continue;
-    }
-
-    let current = fs.readFileSync(change.file, 'utf8');
-    const original = current;
-    if (change.change_type === 'create_file_with_feature') {
-      if (current.trim() === '[features]\ncodex_hooks = true') {
-        if (!dryRun) {
-          fs.rmSync(change.file, { force: true });
-        }
-        removedConfigChanges += 1;
-        touchedFiles.push(change.file);
-      }
-      continue;
-    }
-
-    if (change.change_type === 'replace_false_with_true') {
-      if (/\bcodex_hooks\s*=\s*true\b/.test(current)) {
-        current = current.replace(/\bcodex_hooks\s*=\s*true\b/, 'codex_hooks = false');
-      }
-    } else if (change.change_type === 'insert_under_existing_features') {
-      current = current.replace(/\[features\]\ncodex_hooks = true\n/, '[features]\n');
-    } else if (change.change_type === 'append_features_section') {
-      current = current.replace(/\n?\[features\]\ncodex_hooks = true\n?$/, '\n');
-      if (current === '\n') {
-        current = '';
-      }
-    }
-
-    if (current !== original) {
-      if (!dryRun) {
-        fs.writeFileSync(change.file, current, 'utf8');
-      }
-      removedConfigChanges += 1;
-      touchedFiles.push(change.file);
-    }
-  }
-
-  return {
-    removed_config_changes: removedConfigChanges,
-    touched_files: touchedFiles,
-  };
-}
-
 function removeInstalledCopy(layout, dryRun) {
   const exists = fs.existsSync(layout.installDir);
   if (exists) {
@@ -303,47 +146,21 @@ function buildSummary(options, layout, results) {
     removed: {
       staged_plugin_copy: results.installedCopy.removed,
       marketplace_entries: results.marketplace.removed_plugin_count,
-      hook_registrations: results.hooks.removed_hook_count,
-      hook_entries: results.hooks.removed_entry_count,
-      config_changes: results.config.removed_config_changes,
     },
     remaining: results.postCheck.remaining,
     warnings: results.postCheck.warnings,
     preserved: {
       marketplace_entries: results.marketplace.preserved_plugin_count,
-      hook_registrations: results.hooks.preserved_hook_count,
     },
-    hooks: results.hooks,
     marketplace: results.marketplace,
     installed_copy: results.installedCopy,
-    config: results.config,
   };
 }
 
-function postCheck(layout, manifest) {
+function postCheck(layout) {
   const warnings = [];
-  const hookMatchers = buildHookMatchers(layout, manifest);
-  const hookCommandsPointingToCutepower = [];
   const marketplaceEntries = [];
   const pluginPathExists = fs.existsSync(layout.installDir);
-
-  if (fs.existsSync(layout.codexHooksPath)) {
-    const hooksJson = readJson(layout.codexHooksPath, { hooks: {} });
-    for (const [eventName, entries] of Object.entries(hooksJson.hooks || {})) {
-      for (const entry of Array.isArray(entries) ? entries : []) {
-        for (const hook of Array.isArray(entry.hooks) ? entry.hooks : []) {
-          if (matchesCutepowerHookCommand(hook.command, hookMatchers)) {
-            hookCommandsPointingToCutepower.push({
-              file: layout.codexHooksPath,
-              event: eventName,
-              matcher: entry.matcher || null,
-              command: hook.command,
-            });
-          }
-        }
-      }
-    }
-  }
 
   if (fs.existsSync(layout.marketplacePath)) {
     const marketplace = readJson(layout.marketplacePath, { plugins: [] });
@@ -358,9 +175,6 @@ function postCheck(layout, manifest) {
     }
   }
 
-  if (hookCommandsPointingToCutepower.length > 0) {
-    warnings.push(`Residual hook commands remain in ${layout.codexHooksPath}`);
-  }
   if (marketplaceEntries.length > 0) {
     warnings.push(`Residual marketplace entry remains in ${layout.marketplacePath}`);
   }
@@ -370,7 +184,6 @@ function postCheck(layout, manifest) {
 
   return {
     remaining: {
-      hook_commands_pointing_to_cutepower: hookCommandsPointingToCutepower,
       marketplace_entries: marketplaceEntries,
       plugin_path_exists: pluginPathExists,
     },
@@ -391,17 +204,13 @@ function run(argv = process.argv.slice(2)) {
     warnings.push(`Legacy install or missing manifest: ${getManifestPath(layout)}`);
   }
   const marketplace = pruneMarketplaceEntry(layout, options.dryRun);
-  const hooks = pruneHookRegistrations(layout, manifest, options.dryRun);
-  const config = revertConfigChanges(manifest, options.dryRun);
   const installedCopy = removeInstalledCopy(layout, options.dryRun);
-  const postCheckResult = postCheck(layout, manifest);
+  const postCheckResult = postCheck(layout);
   postCheckResult.warnings = warnings.concat(postCheckResult.warnings);
   const summary = buildSummary(options, layout, {
     manifestFound: Boolean(manifest),
     installedCopy,
     marketplace,
-    hooks,
-    config,
     postCheck: postCheckResult,
   });
   console.log(JSON.stringify(summary, null, 2));
@@ -419,9 +228,7 @@ if (require.main === module) {
 
 module.exports = {
   buildSummary,
-  matchesCutepowerHookCommand,
   parseArgs,
-  pruneHookRegistrations,
   pruneMarketplaceEntry,
   removeInstalledCopy,
   run,

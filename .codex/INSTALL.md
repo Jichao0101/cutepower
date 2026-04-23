@@ -114,7 +114,7 @@ node scripts/install-plugin.js --mode repo --target-root <repo-root> --force
 
 ## Uninstalling
 
-Use the uninstall script so the staged copy, marketplace entry, hook registrations, and manifest-tracked config changes are rolled back together:
+Use the uninstall script so the staged copy and marketplace entry are rolled back together:
 
 ```bash
 node scripts/uninstall-plugin.js --mode personal

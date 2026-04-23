@@ -47,12 +47,12 @@ function testChineseAuditPromptRoutesToReadOnlyCapability() {
   }
 }
 
-function testHookIntegrationFixStillWinsForHookRepairPrompt() {
+function testLegacyRuntimeRepairPromptNoLongerRoutesAsPrimaryCapability() {
   const prompts = [
-    '请按cutepower修复 hook 集成问题并恢复宿主兼容性',
-    '修复 hook 与宿主兼容问题',
-    '修复 codex hook integration',
-    'runtime hook defect',
+    '请按cutepower修复 legacy runtime 集成问题并恢复宿主兼容性',
+    '修复 legacy runtime 与宿主兼容问题',
+    '修复 codex runtime integration',
+    'runtime integration defect',
   ];
   for (const prompt of prompts) {
     const gate = buildRuntimeGate({
@@ -63,9 +63,9 @@ function testHookIntegrationFixStillWinsForHookRepairPrompt() {
         allowed_paths: ['contracts/', 'scripts/', 'docs/'],
       },
     });
-    assert.equal(gate.status, 'ready');
-    assert.equal(gate.route_resolution.route_id, 'explicit_hook_integration_fix');
-    assert.equal(gate.capability, 'hook_integration_fix');
+    assert.equal(gate.status, 'declined');
+    assert.equal(gate.route_resolution.route_id, 'declined_general_execution');
+    assert.equal(gate.capability, null);
   }
 }
 
@@ -85,7 +85,8 @@ function testEvaluateIntakePersistsRequiredPreflightArtifacts() {
   const verdict = evaluateIntake({
     session_id: 's-intake',
     cwd: repoRoot,
-    prompt: '修复 codex hook integration',
+    prompt: '严格按照cutepower分析代码是否满足设计文档',
+    evidence_collection_mode: 'read_only',
     authorization: {
       user_explicitly_authorized: true,
       project_paths_authorized: true,
@@ -101,7 +102,7 @@ function testEvaluateIntakePersistsRequiredPreflightArtifacts() {
 function run() {
   testExplicitReadOnlyAuditGetsReadyGateWithAuthorization();
   testChineseAuditPromptRoutesToReadOnlyCapability();
-  testHookIntegrationFixStillWinsForHookRepairPrompt();
+  testLegacyRuntimeRepairPromptNoLongerRoutesAsPrimaryCapability();
   testGeneralPromptDoesNotRequestCutepowerGovernance();
   testEvaluateIntakePersistsRequiredPreflightArtifacts();
   process.stdout.write('test-task-intake: ok\n');

@@ -49,19 +49,19 @@ function testCoerceHostRuntimePreservesReadOnlyAuditCapability() {
   assert.equal(runtime.evidence_collection_mode, 'read_only');
 }
 
-function testBuildHostRuntimeSupportsHookIntegrationFixCapability() {
+function testBuildHostRuntimeDoesNotPromoteLegacyRuntimeRepairPrompt() {
   const runtime = buildHostRuntime({
     session_id: 's-fix',
-    prompt: 'codex hook integration fix for explicit cutepower mode',
+    prompt: 'codex runtime integration fix for explicit cutepower mode',
     authorization: {
       user_explicitly_authorized: true,
       project_paths_authorized: true,
       allowed_paths: ['contracts/', 'scripts/', 'docs/'],
     },
   });
-  assert.equal(runtime.route_id, 'explicit_hook_integration_fix');
-  assert.equal(runtime.phase, 'implementation');
-  assert.equal(runtime.capability, 'hook_integration_fix');
+  assert.equal(runtime.route_id, 'declined_general_execution');
+  assert.equal(runtime.phase, 'intake');
+  assert.equal(runtime.capability, null);
 }
 
 function testBuildHostRuntimeMarksNonGovernanceInputAsUnmanaged() {
@@ -95,12 +95,12 @@ function testCoerceHostRuntimeLoadsPersistedRuntimeGate() {
   writeArtifact(path.join(workspaceRoot, '.cutepower'), 's-persisted', 'runtime_gate', {
     status: 'ready',
     route_resolution: {
-      route_id: 'explicit_hook_integration_fix',
-      phase: 'implementation',
+      route_id: 'explicit_read_only_functional_audit',
+      phase: 'evidence_collection',
     },
-    phase: 'implementation',
-    capability: 'hook_integration_fix',
-    allowed_actions: ['runtime_discovery_read', 'repo_local_verification_exec'],
+    phase: 'evidence_collection',
+    capability: 'functional_audit_read_only',
+    allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
     allowed_paths: ['scripts/'],
     required_preflight_outputs: ['task_profile', 'route_resolution', 'runtime_gate'],
   });
@@ -108,14 +108,14 @@ function testCoerceHostRuntimeLoadsPersistedRuntimeGate() {
     session_id: 's-persisted',
     cwd: workspaceRoot,
   });
-  assert.equal(runtime.route_id, 'explicit_hook_integration_fix');
+  assert.equal(runtime.route_id, 'explicit_read_only_functional_audit');
   assert.equal(runtime.runtime_gate_status, 'ready');
 }
 
 function run() {
   testBuildHostRuntimeCarriesArtifactContract();
   testCoerceHostRuntimePreservesReadOnlyAuditCapability();
-  testBuildHostRuntimeSupportsHookIntegrationFixCapability();
+  testBuildHostRuntimeDoesNotPromoteLegacyRuntimeRepairPrompt();
   testBuildHostRuntimeMarksNonGovernanceInputAsUnmanaged();
   testBuildSessionCapabilityOnlyForReadyManagedRuntime();
   testCoerceHostRuntimeLoadsPersistedRuntimeGate();

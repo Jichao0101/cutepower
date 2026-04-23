@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { writeArtifact } = require('./run-artifacts');
-const { buildGovernanceVerdict } = require('./hook-response');
+const { buildGovernanceVerdict } = require('./governance-response');
 
 function matchesAnyPattern(patterns, value) {
   return patterns.some((pattern) => pattern.test(value));
@@ -88,42 +88,6 @@ const READ_ONLY_PATTERNS = Object.freeze([
   /without modifying code/,
 ]);
 
-const HOOK_SURFACE_PATTERNS = Object.freeze([
-  /\bcodex hook\b/,
-  /\bhook integration\b/,
-  /\bruntime hook\b/,
-  /\bhook runtime\b/,
-  /\bhost runtime\b/,
-  /\bhook\b/,
-]);
-
-const HOOK_ISSUE_PATTERNS = Object.freeze([
-  /hook integration fix/,
-  /codex hook integration fix/,
-  /host runtime defect/,
-  /runtime defect/,
-  /runtime hook defect/,
-  /hook 宿主/,
-  /hook 集成/,
-  /新版 codex hook 宿主/,
-  /\bintegration\b/,
-  /\bcompat(?:ibility)?\b/,
-  /\bdefect\b/,
-  /\bbug\b/,
-  /兼容/,
-  /问题/,
-  /异常/,
-  /缺陷/,
-]);
-
-const REPAIR_INTENT_PATTERNS = Object.freeze([
-  /修复/,
-  /改造/,
-  /fix/,
-  /repair/,
-  /resolve/,
-]);
-
 function hasAuditIntent(prompt) {
   return matchesAnyPattern(AUDIT_INTENT_PATTERNS, prompt)
     || (
@@ -134,24 +98,6 @@ function hasAuditIntent(prompt) {
 
 function hasReadOnlyIntent(prompt) {
   return matchesAnyPattern(READ_ONLY_PATTERNS, prompt);
-}
-
-function hasHookIntegrationFixIntent(prompt) {
-  if (matchesAnyPattern([
-    /hook integration fix/,
-    /codex hook integration fix/,
-    /runtime hook defect/,
-    /host runtime defect/,
-    /修复\s*hook\s*与\s*宿主兼容问题/,
-  ], prompt)) {
-    return true;
-  }
-
-  return matchesAnyPattern(HOOK_SURFACE_PATTERNS, prompt)
-    && (
-      matchesAnyPattern(HOOK_ISSUE_PATTERNS, prompt)
-      || matchesAnyPattern(REPAIR_INTENT_PATTERNS, prompt)
-    );
 }
 
 const AUDIT_PATTERNS = Object.freeze([
@@ -188,11 +134,9 @@ function analyzeCutepowerIntent(input = {}) {
   ];
   const auditIntent = hasAuditIntent(normalizedPrompt);
   const readOnlyIntent = hasReadOnlyIntent(normalizedPrompt);
-  const hookIntegrationFixIntent = hasHookIntegrationFixIntent(normalizedPrompt);
   const isExplicitCutepowerRequest = matchesAnyPattern(EXPLICIT_CUTEPOWER_PATTERNS, normalizedPrompt);
   const isRepoGovernanceTask = matchesAnyPattern(repoGovernanceTerms, normalizedPrompt)
     || auditIntent
-    || hookIntegrationFixIntent
     || (matchesAnyPattern(DESIGN_REFERENCE_PATTERNS, normalizedPrompt) && readOnlyIntent);
   const isGreetingLike = /^(?:hi|hello|hey|hallo|你好|您好|嗨|哈喽)\b[!\s]*$/i.test(prompt);
   const isGeneralRepoQuestion = /^(?:please\s+)?(?:explain|summarize|describe)\s+(?:this|the)\s+repo\b/i.test(prompt);
@@ -204,7 +148,6 @@ function analyzeCutepowerIntent(input = {}) {
     is_repo_governance_task: isRepoGovernanceTask,
     is_audit_intent: auditIntent,
     is_read_only_intent: readOnlyIntent,
-    is_hook_integration_fix_intent: hookIntegrationFixIntent,
     is_greeting_like: isGreetingLike,
     is_general_repo_question: isGeneralRepoQuestion,
     should_consider_cutepower: isExplicitCutepowerRequest || isRepoGovernanceTask,
@@ -213,10 +156,7 @@ function analyzeCutepowerIntent(input = {}) {
 
 function normalizeTaskProfile(input = {}) {
   const intent = analyzeCutepowerIntent(input);
-  const prompt = intent.normalized_prompt;
   const explicitMode = input.explicit_mode !== false;
-  const requestedIntegrationFix = intent.is_hook_integration_fix_intent
-    || input.task_type === 'hook_integration_fix';
   const requestedAudit = intent.is_audit_intent
     || input.audit_mode === 'functional_read_only';
   const readOnlyRequested = requestedAudit
@@ -224,22 +164,16 @@ function normalizeTaskProfile(input = {}) {
     || input.evidence_collection_mode === 'read_only';
 
   return {
-    primary_type: requestedIntegrationFix
-      ? 'hook_integration_fix'
-      : requestedAudit
-        ? 'functional_audit'
-        : 'general_task',
-    task_modifiers: requestedIntegrationFix
-        ? ['implementation', 'verification']
-        : requestedAudit
-          ? ['read_only', 'strict']
-        : [],
+    primary_type: requestedAudit
+      ? 'functional_audit'
+      : 'general_task',
+    task_modifiers: requestedAudit
+      ? ['read_only', 'strict']
+      : [],
     explicit_mode: explicitMode,
-    requested_capability: requestedIntegrationFix
-      ? 'hook_integration_fix'
-      : requestedAudit && readOnlyRequested
-        ? 'functional_audit_read_only'
-        : 'unknown',
+    requested_capability: requestedAudit && readOnlyRequested
+      ? 'functional_audit_read_only'
+      : 'unknown',
     requested_outputs: ['task_profile', 'route_resolution', 'runtime_gate'],
     governance_signal: intent.should_consider_cutepower,
   };
@@ -278,24 +212,6 @@ function extractAuthorization(input = {}) {
 }
 
 function resolveRoute(taskProfile, authorization) {
-  if (
-    taskProfile.explicit_mode
-    && taskProfile.requested_capability === 'hook_integration_fix'
-  ) {
-    return {
-      route_id: 'explicit_hook_integration_fix',
-      phase: 'implementation',
-      allowed_actions: authorization.user_explicitly_authorized
-        ? [
-            'runtime_discovery_read',
-            'authorized_business_context_read',
-            'repo_local_verification_exec',
-          ]
-        : ['runtime_discovery_read'],
-      required_artifacts: ['task_profile', 'route_resolution', 'runtime_gate'],
-    };
-  }
-
   if (
     taskProfile.explicit_mode
     && taskProfile.requested_capability === 'functional_audit_read_only'
@@ -341,36 +257,6 @@ function buildRuntimeGate(input = {}) {
       allowed_paths: [],
       evidence_collection_mode: null,
       capability: null,
-      required_preflight_outputs: route_resolution.required_artifacts,
-    };
-  }
-
-  if (route_resolution.route_id === 'explicit_hook_integration_fix') {
-    if (!authorization.user_explicitly_authorized || !authorization.project_paths_authorized) {
-      return {
-        status: 'blocked',
-        task_profile,
-        route_resolution,
-        blocking_reasons: ['explicit_authorization_for_project_read_missing'],
-        phase: 'intake',
-        allowed_actions: ['runtime_discovery_read'],
-        allowed_paths: [],
-        evidence_collection_mode: null,
-        capability: 'hook_integration_fix',
-        required_preflight_outputs: route_resolution.required_artifacts,
-      };
-    }
-
-    return {
-      status: 'ready',
-      task_profile,
-      route_resolution,
-      phase: route_resolution.phase,
-      allowed_actions: route_resolution.allowed_actions,
-      allowed_paths: allowedPaths,
-      evidence_collection_mode: 'implementation',
-      capability: 'hook_integration_fix',
-      authorization,
       required_preflight_outputs: route_resolution.required_artifacts,
     };
   }

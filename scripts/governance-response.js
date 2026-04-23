@@ -18,11 +18,11 @@ const DECISION_STATUS_PAIRS = Object.freeze({
 function assertDecisionStatusPair(decision, status) {
   const allowedStatuses = DECISION_STATUS_PAIRS[decision];
   if (!allowedStatuses || !allowedStatuses.has(status)) {
-    throw new Error(`Invalid hook decision/status pair: ${decision}/${status}`);
+    throw new Error(`Invalid governance decision/status pair: ${decision}/${status}`);
   }
 }
 
-function buildHookResponse(decision, status, reason, extras = {}) {
+function buildDecisionEnvelope(decision, status, reason, extras = {}) {
   assertDecisionStatusPair(decision, status);
   return {
     decision,
@@ -35,19 +35,19 @@ function buildHookResponse(decision, status, reason, extras = {}) {
 }
 
 function ok(reason, extras = {}) {
-  return buildHookResponse('allow', extras.status || 'ready', reason, extras);
+  return buildDecisionEnvelope('allow', extras.status || 'ready', reason, extras);
 }
 
 function deny(reason, extras = {}) {
-  return buildHookResponse('deny', extras.status || 'blocked', reason, extras);
+  return buildDecisionEnvelope('deny', extras.status || 'blocked', reason, extras);
 }
 
 function passThrough(reason, extras = {}) {
-  return buildHookResponse('pass_through', extras.status || 'not_applicable', reason, extras);
+  return buildDecisionEnvelope('pass_through', extras.status || 'not_applicable', reason, extras);
 }
 
-function hookError(reason, extras = {}) {
-  return buildHookResponse('error', 'error', reason, extras);
+function governanceError(reason, extras = {}) {
+  return buildDecisionEnvelope('error', 'error', reason, extras);
 }
 
 function buildGovernanceVerdict(stage, overrides = {}) {
@@ -98,11 +98,11 @@ function mapVerdictToDecisionStatus(verdict) {
 
 module.exports = {
   assertDecisionStatusPair,
+  buildDecisionEnvelope,
   buildGovernanceVerdict,
-  buildHookResponse,
   DECISION_STATUS_PAIRS,
   deny,
-  hookError,
+  governanceError,
   mapVerdictToDecisionStatus,
   ok,
   passThrough,

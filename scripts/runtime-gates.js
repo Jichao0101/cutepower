@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { artifactPath } = require('./run-artifacts');
-const { buildGovernanceVerdict } = require('./hook-response');
+const { buildGovernanceVerdict } = require('./governance-response');
 const { validateSessionCapability } = require('./host-runtime');
 const {
   FUNCTIONAL_REVIEW_REQUIRED_ARTIFACTS,
@@ -591,7 +591,7 @@ function inferToolActionFromCommand(payload, hostRuntime) {
   if (mutatingVerbs.has(verb)) {
     return {
       action: 'unmapped_tool_event',
-      reason: 'mutating_or_unreviewed_command_denied_in_hook_layer',
+      reason: 'mutating_or_unreviewed_command_denied_in_runtime_gate',
       command,
       target_paths: [],
       risk_level: 'high',
@@ -948,7 +948,7 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
         terminal_outcome: 'blocked',
       },
       diagnostics: functionalReviewActive ? { review_validation: reviewValidation } : {},
-      message: 'Stop hook completed with a blocked terminal state.',
+      message: 'Completion gate recorded a blocked terminal state.',
     });
   }
 
@@ -986,7 +986,7 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
         terminal_outcome: 'completed',
       },
       diagnostics: functionalReviewActive ? { review_validation: reviewValidation } : {},
-      message: 'Stop hook completed with a structured terminal state.',
+      message: 'Completion gate recorded a structured terminal state.',
     });
   }
 
@@ -1018,7 +1018,7 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
       runtime_gate_status: hostRuntime.runtime_gate_status,
       review_validation: reviewValidation,
     },
-    message: 'Stop hook found incomplete cutepower artifacts; host closure is not completed.',
+    message: 'Completion gate found incomplete cutepower artifacts; host closure is not completed.',
   });
 }
 

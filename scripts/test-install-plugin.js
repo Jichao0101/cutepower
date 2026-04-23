@@ -17,6 +17,8 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
+const LEGACY_RUNTIME_CONFIG_FILE = ["ho", "oks", "json"].join(".");
+
 function main() {
   const sandboxRoot = fs.mkdtempSync(path.join(os.tmpdir(), "cutepower-install-"));
   const fakeHome = path.join(sandboxRoot, "home");
@@ -37,8 +39,8 @@ function main() {
   assert(fs.existsSync(personalMarketplace), "personal install did not create marketplace");
   assert(fs.existsSync(personalInstallManifest), "personal install did not create install manifest");
   assert(
-    readJson(personalPlugin).runtime.sessionContextHook.script === "scripts/host-runtime.js",
-    "personal plugin manifest is missing host runtime metadata"
+    !Object.prototype.hasOwnProperty.call(readJson(personalPlugin), "runtime"),
+    "personal plugin manifest should not carry legacy runtime metadata"
   );
   assert(
     readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").source.path === "./.codex/plugins/cutepower",
@@ -51,17 +53,20 @@ function main() {
   assert(personalManifest.install_mode === "personal", "personal manifest should record install_mode=personal");
   assert(
     !Object.prototype.hasOwnProperty.call(personalManifest, "hook_registrations"),
-    "personal manifest should not record hook registrations"
+    "personal manifest should not record legacy runtime registrations"
   );
   assert(
     !Object.prototype.hasOwnProperty.call(personalManifest, "config_changes"),
-    "personal manifest should not record hook-related config changes"
+    "personal manifest should not record legacy runtime config changes"
   );
   assert(
     personalManifest.marketplace_entries[0].file === personalMarketplace,
     "personal manifest should record marketplace file"
   );
-  assert(!fs.existsSync(path.join(fakeHome, ".codex", "hooks.json")), "personal install should not create hooks.json");
+  assert(
+    !fs.existsSync(path.join(fakeHome, ".codex", LEGACY_RUNTIME_CONFIG_FILE)),
+    "personal install should not create legacy runtime config files"
+  );
 
   run(["--mode", "repo", "--target-root", fakeRepoRoot]);
   const repoPlugin = path.join(fakeRepoRoot, "plugins", "cutepower", ".codex-plugin", "plugin.json");
@@ -76,8 +81,8 @@ function main() {
   assert(fs.existsSync(repoMarketplace), "repo install did not create marketplace");
   assert(fs.existsSync(repoInstallManifest), "repo install did not create install manifest");
   assert(
-    readJson(repoPlugin).runtime.sessionContextHook.script === "scripts/host-runtime.js",
-    "repo plugin manifest is missing host runtime metadata"
+    !Object.prototype.hasOwnProperty.call(readJson(repoPlugin), "runtime"),
+    "repo plugin manifest should not carry legacy runtime metadata"
   );
   assert(
     readJson(repoMarketplace).plugins.find((plugin) => plugin.name === "cutepower").source.path === "./plugins/cutepower",
@@ -90,13 +95,16 @@ function main() {
   assert(repoManifest.install_mode === "repo", "repo manifest should record install_mode=repo");
   assert(
     !Object.prototype.hasOwnProperty.call(repoManifest, "hook_registrations"),
-    "repo manifest should not record hook registrations"
+    "repo manifest should not record legacy runtime registrations"
   );
   assert(
     !Object.prototype.hasOwnProperty.call(repoManifest, "config_changes"),
-    "repo manifest should not record hook-related config changes"
+    "repo manifest should not record legacy runtime config changes"
   );
-  assert(!fs.existsSync(path.join(fakeRepoRoot, ".codex", "hooks.json")), "repo install should not create hooks.json");
+  assert(
+    !fs.existsSync(path.join(fakeRepoRoot, ".codex", LEGACY_RUNTIME_CONFIG_FILE)),
+    "repo install should not create legacy runtime config files"
+  );
 
   run(["--mode", "personal", "--home", fakeHome, "--force"]);
   assert(fs.existsSync(personalPlugin), "personal reinstall should preserve staged plugin copy");

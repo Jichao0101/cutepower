@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 
 const { run } = require("./install-plugin");
+const { MANIFEST_FILE } = require("./install-manifest");
 
 function assert(condition, message) {
   if (!condition) {
@@ -86,12 +87,14 @@ function main() {
   const personalCodexConfig = path.join(fakeHome, ".codex", "config.toml");
   const personalCodexHooks = path.join(fakeHome, ".codex", "hooks.json");
   const personalMarketplace = path.join(fakeHome, ".agents", "plugins", "marketplace.json");
+  const personalInstallManifest = path.join(fakeHome, ".codex", "plugins", "cutepower", MANIFEST_FILE);
   assert(fs.existsSync(personalPlugin), "personal install did not create plugin manifest");
   assert(fs.existsSync(personalAgent), "personal install did not copy runtime agent metadata");
   assert(fs.existsSync(personalHostRuntime), "personal install did not copy host runtime hook");
   assert(fs.existsSync(personalCodexConfig), "personal install did not write Codex config");
   assert(fs.existsSync(personalCodexHooks), "personal install did not write Codex hooks");
   assert(fs.existsSync(personalMarketplace), "personal install did not create marketplace");
+  assert(fs.existsSync(personalInstallManifest), "personal install did not create install manifest");
   assert(
     readJson(personalPlugin).runtime.sessionContextHook.script === "scripts/host-runtime.js",
     "personal plugin manifest is missing host runtime hook metadata"
@@ -124,6 +127,18 @@ function main() {
     readJson(personalMarketplace).plugins.find((plugin) => plugin.name === "cutepower").policy.installation === "AVAILABLE",
     "personal marketplace installation policy is incorrect"
   );
+  assert(
+    readJson(personalInstallManifest).install_mode === "personal",
+    "personal manifest should record install_mode=personal"
+  );
+  assert(
+    readJson(personalInstallManifest).hook_registrations.length === 3,
+    "personal manifest should record cutepower hook registrations"
+  );
+  assert(
+    readJson(personalInstallManifest).marketplace_entries[0].file === personalMarketplace,
+    "personal manifest should record marketplace file"
+  );
 
   run(["--mode", "repo", "--target-root", fakeRepoRoot]);
   const repoPlugin = path.join(fakeRepoRoot, "plugins", "cutepower", ".codex-plugin", "plugin.json");
@@ -132,12 +147,14 @@ function main() {
   const repoCodexConfig = path.join(fakeRepoRoot, ".codex", "config.toml");
   const repoCodexHooks = path.join(fakeRepoRoot, ".codex", "hooks.json");
   const repoMarketplace = path.join(fakeRepoRoot, ".agents", "plugins", "marketplace.json");
+  const repoInstallManifest = path.join(fakeRepoRoot, "plugins", "cutepower", MANIFEST_FILE);
   assert(fs.existsSync(repoPlugin), "repo install did not create plugin manifest");
   assert(fs.existsSync(repoAgent), "repo install did not copy runtime agent metadata");
   assert(fs.existsSync(repoHostRuntime), "repo install did not copy host runtime hook");
   assert(fs.existsSync(repoCodexConfig), "repo install did not write Codex config");
   assert(fs.existsSync(repoCodexHooks), "repo install did not write Codex hooks");
   assert(fs.existsSync(repoMarketplace), "repo install did not create marketplace");
+  assert(fs.existsSync(repoInstallManifest), "repo install did not create install manifest");
   assert(
     readJson(repoPlugin).runtime.sessionContextHook.script === "scripts/host-runtime.js",
     "repo plugin manifest is missing host runtime hook metadata"
@@ -163,6 +180,14 @@ function main() {
   assert(
     readJson(repoMarketplace).plugins.find((plugin) => plugin.name === "cutepower").policy.installation === "AVAILABLE",
     "repo marketplace installation policy is incorrect"
+  );
+  assert(
+    readJson(repoInstallManifest).install_mode === "repo",
+    "repo manifest should record install_mode=repo"
+  );
+  assert(
+    readJson(repoInstallManifest).hook_registrations.some((entry) => entry.event === "PreToolUse"),
+    "repo manifest should record hook events"
   );
 
   run(["--mode", "personal", "--home", fakeHome, "--force"]);

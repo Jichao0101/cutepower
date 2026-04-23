@@ -114,8 +114,14 @@ node scripts/install-plugin.js --mode repo --target-root <repo-root> --force
 
 ## Uninstalling
 
-- personal install: remove `~/.codex/plugins/cutepower` and delete or edit the cutepower entry in `~/.agents/plugins/marketplace.json`
-- repo install: remove `<repo-root>/plugins/cutepower` and delete or edit the cutepower entry in `<repo-root>/.agents/plugins/marketplace.json`
+Use the uninstall script so the staged copy, marketplace entry, hook registrations, and manifest-tracked config changes are rolled back together:
+
+```bash
+node scripts/uninstall-plugin.js --mode personal
+node scripts/uninstall-plugin.js --mode repo --target-root <repo-root>
+```
+
+Each install writes `.install-manifest.json` next to the staged plugin copy. Uninstall reads that manifest first and falls back to legacy path-based cleanup only when the manifest is missing.
 
 ## Migrating from direct-link installs
 

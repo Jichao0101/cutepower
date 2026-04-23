@@ -3,6 +3,9 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { spawnSync } = require("child_process");
+
+const { getManifestPath, writeInstallManifest } = require("./install-manifest");
 
 const repoRoot = path.resolve(__dirname, "..");
 const pluginName = "cutepower";
@@ -202,30 +205,71 @@ function writeMarketplace(layout) {
   marketplace.plugins = nextPlugins;
 
   fs.writeFileSync(layout.marketplacePath, `${JSON.stringify(marketplace, null, 2)}\n`, "utf8");
+  return [
+    {
+      file: layout.marketplacePath,
+      key: pluginName,
+      value: entry
+    }
+  ];
 }
 
 function ensureCodexHooksFeature(configPath) {
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   if (!fs.existsSync(configPath)) {
     fs.writeFileSync(configPath, "[features]\ncodex_hooks = true\n", "utf8");
-    return;
+    return [
+      {
+        file: configPath,
+        path: "features.codex_hooks",
+        value: true,
+        change_type: "create_file_with_feature",
+        previous_state: "missing"
+      }
+    ];
   }
 
   const current = fs.readFileSync(configPath, "utf8");
   if (/\bcodex_hooks\s*=/.test(current)) {
     if (/\bcodex_hooks\s*=\s*false\b/.test(current)) {
       fs.writeFileSync(configPath, current.replace(/\bcodex_hooks\s*=\s*false\b/, "codex_hooks = true"), "utf8");
+      return [
+        {
+          file: configPath,
+          path: "features.codex_hooks",
+          value: true,
+          change_type: "replace_false_with_true",
+          previous_state: false
+        }
+      ];
     }
-    return;
+    return [];
   }
 
   if (/\[features\]/.test(current)) {
     fs.writeFileSync(configPath, current.replace(/\[features\]\s*/m, "[features]\ncodex_hooks = true\n"), "utf8");
-    return;
+    return [
+      {
+        file: configPath,
+        path: "features.codex_hooks",
+        value: true,
+        change_type: "insert_under_existing_features",
+        previous_state: "missing"
+      }
+    ];
   }
 
   const suffix = current.endsWith("\n") ? "" : "\n";
   fs.writeFileSync(configPath, `${current}${suffix}\n[features]\ncodex_hooks = true\n`, "utf8");
+  return [
+    {
+      file: configPath,
+      path: "features.codex_hooks",
+      value: true,
+      change_type: "append_features_section",
+      previous_state: "missing"
+    }
+  ];
 }
 
 function readHooksFile(hooksPath) {
@@ -282,10 +326,19 @@ function mergeHooks(layout) {
   fs.mkdirSync(path.dirname(layout.codexHooksPath), { recursive: true });
   const current = readHooksFile(layout.codexHooksPath);
   const desired = buildHookEntries(layout);
+  const registrations = [];
 
   for (const [eventName, entries] of Object.entries(desired)) {
     const existingEntries = Array.isArray(current.hooks[eventName]) ? current.hooks[eventName] : [];
     for (const entry of entries) {
+      for (const hook of entry.hooks || []) {
+        registrations.push({
+          file: layout.codexHooksPath,
+          event: eventName,
+          matcher: entry.matcher || null,
+          command: hook.command
+        });
+      }
       const exists = existingEntries.some(
         (candidate) =>
           candidate.matcher === entry.matcher &&
@@ -299,6 +352,43 @@ function mergeHooks(layout) {
   }
 
   fs.writeFileSync(layout.codexHooksPath, `${JSON.stringify(current, null, 2)}\n`, "utf8");
+  return registrations;
+}
+
+function detectSource() {
+  const commit = spawnSync("git", ["rev-parse", "HEAD"], {
+    cwd: repoRoot,
+    encoding: "utf8"
+  });
+  const branch = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd: repoRoot,
+    encoding: "utf8"
+  });
+  const status = spawnSync("git", ["status", "--short"], {
+    cwd: repoRoot,
+    encoding: "utf8"
+  });
+
+  return {
+    repo: repoRoot,
+    commit: commit.status === 0 ? commit.stdout.trim() : null,
+    branch: branch.status === 0 ? branch.stdout.trim() : null,
+    dirty: status.status === 0 ? status.stdout.trim().length > 0 : null
+  };
+}
+
+function buildInstallManifest(layout, options, writes) {
+  return {
+    plugin_name: pluginName,
+    install_mode: options.mode,
+    installed_plugin_path: layout.installDir,
+    manifest_path: getManifestPath(layout),
+    marketplace_entries: writes.marketplaceEntries,
+    hook_registrations: writes.hookRegistrations,
+    config_changes: writes.configChanges,
+    installed_at: new Date().toISOString(),
+    source: detectSource()
+  };
 }
 
 function run(argv = process.argv.slice(2)) {
@@ -306,15 +396,23 @@ function run(argv = process.argv.slice(2)) {
   ensurePluginManifest();
   const layout = resolveLayout(options);
   installRuntime(layout, options);
-  ensureCodexHooksFeature(layout.codexConfigPath);
-  mergeHooks(layout);
+  const configChanges = ensureCodexHooksFeature(layout.codexConfigPath);
+  const hookRegistrations = mergeHooks(layout);
+  let marketplaceEntries = [];
   if (!options.noMarketplace) {
-    writeMarketplace(layout);
+    marketplaceEntries = writeMarketplace(layout);
   }
+  const manifest = buildInstallManifest(layout, options, {
+    marketplaceEntries,
+    hookRegistrations,
+    configChanges
+  });
+  writeInstallManifest(layout, manifest);
 
   console.log(`Installed ${pluginName}`);
   console.log(`  mode: ${options.mode}`);
   console.log(`  installDir: ${layout.installDir}`);
+  console.log(`  manifest: ${getManifestPath(layout)}`);
   console.log(`  codex config: ${layout.codexConfigPath}`);
   console.log(`  codex hooks: ${layout.codexHooksPath}`);
   if (!options.noMarketplace) {
@@ -336,6 +434,7 @@ module.exports = {
   RUNTIME_PATHS,
   buildHookEntries,
   ensureCodexHooksFeature,
+  buildInstallManifest,
   mergeHooks,
   parseArgs,
   resolveLayout,

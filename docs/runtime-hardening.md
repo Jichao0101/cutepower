@@ -1,43 +1,51 @@
-# Runtime Hardening
+# Runtime Enforcement
 
-This repo now treats explicit `cutepower` runs as repo-local managed sessions under `.cutepower/run/<session_id>/`.
+This document describes the current runtime enforcement layer for cutepower. It is not a separate truth source and should be read together with `contracts/` and `docs/skill-workflow-map.md`.
 
-Key changes:
+## Current model
 
-- `task-intake` allocates `session_id`, writes preflight artifacts, and exposes an `artifact_plan`.
-- `host-runtime` issues a session capability tied to `session_id`, `route_id`, `phase`, `allowed_actions`, and `artifact_dir`.
-- `runtime-gates` now deny protected execution when capability, phase, or required artifacts do not match.
-- run completion cannot turn a failed or incomplete run into `completed`. Ready sessions must close with `evidence_manifest`, `review_decision` when review is required, and `writeback_receipt` or `writeback_declined` when writeback is required.
+cutepower now runs as:
 
-Run-state model:
+- skill-first workflow discipline
+- contracts-first truth
+- runtime-gate enforcement
 
-- Session root: `.cutepower/run/<session_id>/`
-- Session metadata: `session.json`
-- Stable artifacts:
-  - `task_profile.json`
-  - `route_resolution.json`
-  - `runtime_gate.json`
-  - `context_requirements.json`
-  - `blocking_gaps.json`
-  - `evidence_manifest.json`
-  - `review_decision.json`
-  - `writeback_receipt.json`
-  - `writeback_declined.json`
+That means:
 
-Phase model:
+- `using-cutepower` is the mandatory dispatcher for governed work
+- `task-intake` persists dispatcher and preflight artifacts under `.cutepower/run/<session_id>/`
+- `host-runtime` issues a session capability tied to the routed session
+- `runtime-gates` deny protected execution when capability, phase, required artifacts, or governed skill order do not match
 
-- `session_initialized`
-- `intake_accepted`
-- `route_resolved`
-- `gate_ready`
-- `review_active`
-- `writeback_ready`
-- `completed`
-- `declined`
-- `blocked`
-- `clarification_required`
+## Stable preflight artifacts
 
-Helper script:
+- `task_profile.json`
+- `route_resolution.json`
+- `dispatch_manifest.json`
+- `runtime_gate.json`
+
+## Stable closure artifacts
+
+- `evidence_manifest.json`
+- `review_decision.json` when review is required
+- `writeback_receipt.json` or `writeback_declined.json` when writeback is required
+
+## What runtime enforces
+
+- session capability validity
+- required preflight artifact existence
+- route and phase admission
+- read-only evidence collection constraints where applicable
+- governed skill order through `dispatch_manifest.next_skill`
+- legal terminal closure
+
+## What runtime does not replace
+
+- `contracts/` as active governance truth
+- `skills/` as the human-readable workflow discipline layer
+- `README.md` and `docs/skill-workflow-map.md` as overview material
+
+## Helper script
 
 ```bash
 node scripts/run-artifacts.js status .cutepower/run/<session_id>

@@ -1,6 +1,6 @@
 # 1 cutepower for Codex
 
-cutepower is a contracts-first governance plugin for the Agent Workflow P1 loop.
+cutepower is a governance plugin centered on skill-first workflow discipline, contracts-first truth, and runtime-gate enforcement.
 
 If cutepower is not installed yet, tell Codex:
 
@@ -24,12 +24,14 @@ Current repository note:
 
 Current installed scope:
 
-- P0 runtime assets remain active
+- governed dispatcher, routing, and runtime assets remain active
 - P1 contracts and skills add:
   - `cute-board-run`
   - `cute-functional-review`
   - `cute-incident-investigation`
 - static validation uses `scripts/validate-contracts.js`
+- skill routing validation uses `scripts/test-skill-routing.js`
+- skill document discipline validation uses `scripts/test-skill-docs.js`
 - runtime gate verification uses `scripts/test-runtime-gates.js`
 - host runtime injection verification uses `scripts/test-host-runtime.js`
 - default-entry takeover verification uses `scripts/test-task-intake.js`

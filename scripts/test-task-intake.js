@@ -20,32 +20,50 @@ function testExplicitReadOnlyAuditGetsReadyGateWithAuthorization() {
 }
 
 function testChineseAuditPromptRoutesToReadOnlyCapability() {
-  const gate = buildRuntimeGate({
-    prompt: '严格按照cutepower分析代码是否满足设计文档',
-    evidence_collection_mode: 'read_only',
-    authorization: {
-      user_explicitly_authorized: true,
-      project_paths_authorized: true,
-      allowed_paths: ['contracts/', 'scripts/'],
-    },
-  });
-  assert.equal(gate.status, 'ready');
-  assert.equal(gate.route_resolution.route_id, 'explicit_read_only_functional_audit');
-  assert.equal(gate.capability, 'functional_audit_read_only');
+  const prompts = [
+    '严格按照cutepower分析代码是否满足设计文档',
+    '按cutepower审查，不修改代码，只分析',
+    '对照设计文档做符合性分析',
+    '做只读审查',
+    '做合规分析',
+    '检查代码是否符合设计',
+  ];
+  for (const prompt of prompts) {
+    const gate = buildRuntimeGate({
+      prompt,
+      evidence_collection_mode: 'read_only',
+      authorization: {
+        user_explicitly_authorized: true,
+        project_paths_authorized: true,
+        allowed_paths: ['contracts/', 'scripts/'],
+      },
+    });
+    assert.equal(gate.status, 'ready');
+    assert.equal(gate.route_resolution.route_id, 'explicit_read_only_functional_audit');
+    assert.equal(gate.capability, 'functional_audit_read_only');
+  }
 }
 
 function testHookIntegrationFixStillWinsForHookRepairPrompt() {
-  const gate = buildRuntimeGate({
-    prompt: '请按cutepower修复 hook 集成问题并恢复宿主兼容性',
-    authorization: {
-      user_explicitly_authorized: true,
-      project_paths_authorized: true,
-      allowed_paths: ['contracts/', 'scripts/', 'docs/'],
-    },
-  });
-  assert.equal(gate.status, 'ready');
-  assert.equal(gate.route_resolution.route_id, 'explicit_hook_integration_fix');
-  assert.equal(gate.capability, 'hook_integration_fix');
+  const prompts = [
+    '请按cutepower修复 hook 集成问题并恢复宿主兼容性',
+    '修复 hook 与宿主兼容问题',
+    '修复 codex hook integration',
+    'runtime hook defect',
+  ];
+  for (const prompt of prompts) {
+    const gate = buildRuntimeGate({
+      prompt,
+      authorization: {
+        user_explicitly_authorized: true,
+        project_paths_authorized: true,
+        allowed_paths: ['contracts/', 'scripts/', 'docs/'],
+      },
+    });
+    assert.equal(gate.status, 'ready');
+    assert.equal(gate.route_resolution.route_id, 'explicit_hook_integration_fix');
+    assert.equal(gate.capability, 'hook_integration_fix');
+  }
 }
 
 function testGeneralPromptDoesNotRequestCutepowerGovernance() {

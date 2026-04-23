@@ -17,7 +17,7 @@ const EXPLICIT_CUTEPOWER_PATTERNS = Object.freeze([
   /使用\s*cutepower/,
 ]);
 
-const AUDIT_PATTERNS = Object.freeze([
+const AUDIT_INTENT_PATTERNS = Object.freeze([
   /read-?only functional audit/,
   /functional audit/,
   /readonly audit/,
@@ -29,16 +29,43 @@ const AUDIT_PATTERNS = Object.freeze([
   /按\s*cutepower.*(?:审查|分析|review|audit|检查)/,
   /按照\s*cutepower.*(?:审查|分析|review|audit|检查)/,
   /严格按照\s*cutepower.*(?:审查|分析|review|audit|检查)/,
+  /做只读审查/,
+  /做合规分析/,
+  /做符合性分析/,
   /只读审查/,
   /read-?only\s*审查/,
   /合规分析/,
   /符合性分析/,
+  /符合设计/,
+  /满足设计文档/,
+  /检查代码是否符合设计/,
+  /检查代码是否符合设计文档/,
+  /检查代码是否满足设计文档/,
+  /对照设计做(?:符合性分析|合规分析|审查|分析|检查)/,
   /对照设计文档(?:检查|审查|分析|review|audit)?/,
   /代码对照设计文档/,
   /是否满足设计文档/,
   /是否符合设计/,
   /design(?: document| doc)?.*(?:compliance|conformance|review|audit|check)/,
   /check.*design(?: document| doc)/,
+]);
+
+const DESIGN_REFERENCE_PATTERNS = Object.freeze([
+  /设计文档/,
+  /对照设计/,
+  /对照设计文档/,
+  /design(?: document| doc)/,
+]);
+
+const CODE_ANALYSIS_PATTERNS = Object.freeze([
+  /分析代码/,
+  /代码分析/,
+  /检查代码/,
+  /代码检查/,
+  /审查代码/,
+  /检查代码是否/,
+  /analy(?:s|z)e code/,
+  /check code/,
 ]);
 
 const READ_ONLY_PATTERNS = Object.freeze([
@@ -55,16 +82,76 @@ const READ_ONLY_PATTERNS = Object.freeze([
   /without modifying code/,
 ]);
 
-const HOOK_INTEGRATION_FIX_PATTERNS = Object.freeze([
+const HOOK_SURFACE_PATTERNS = Object.freeze([
+  /\bcodex hook\b/,
+  /\bhook integration\b/,
+  /\bruntime hook\b/,
+  /\bhook runtime\b/,
+  /\bhost runtime\b/,
+  /\bhook\b/,
+]);
+
+const HOOK_ISSUE_PATTERNS = Object.freeze([
   /hook integration fix/,
   /codex hook integration fix/,
   /host runtime defect/,
   /runtime defect/,
+  /runtime hook defect/,
   /hook 宿主/,
   /hook 集成/,
   /新版 codex hook 宿主/,
-  /修复.*(?:codex hook|hook|宿主).*(?:兼容|集成|问题|异常|缺陷)/,
-  /(?:codex hook|hook|宿主).*(?:修复|改造|兼容|集成问题)/,
+  /\bintegration\b/,
+  /\bcompat(?:ibility)?\b/,
+  /\bdefect\b/,
+  /\bbug\b/,
+  /兼容/,
+  /问题/,
+  /异常/,
+  /缺陷/,
+]);
+
+const REPAIR_INTENT_PATTERNS = Object.freeze([
+  /修复/,
+  /改造/,
+  /fix/,
+  /repair/,
+  /resolve/,
+]);
+
+function hasAuditIntent(prompt) {
+  return matchesAnyPattern(AUDIT_INTENT_PATTERNS, prompt)
+    || (
+      matchesAnyPattern(DESIGN_REFERENCE_PATTERNS, prompt)
+      && matchesAnyPattern(CODE_ANALYSIS_PATTERNS, prompt)
+    );
+}
+
+function hasReadOnlyIntent(prompt) {
+  return matchesAnyPattern(READ_ONLY_PATTERNS, prompt);
+}
+
+function hasHookIntegrationFixIntent(prompt) {
+  if (matchesAnyPattern([
+    /hook integration fix/,
+    /codex hook integration fix/,
+    /runtime hook defect/,
+    /host runtime defect/,
+    /修复\s*hook\s*与\s*宿主兼容问题/,
+  ], prompt)) {
+    return true;
+  }
+
+  return matchesAnyPattern(HOOK_SURFACE_PATTERNS, prompt)
+    && (
+      matchesAnyPattern(HOOK_ISSUE_PATTERNS, prompt)
+      || matchesAnyPattern(REPAIR_INTENT_PATTERNS, prompt)
+    );
+}
+
+const AUDIT_PATTERNS = Object.freeze([
+  ...AUDIT_INTENT_PATTERNS,
+  ...DESIGN_REFERENCE_PATTERNS,
+  ...CODE_ANALYSIS_PATTERNS,
 ]);
 
 function extractPromptText(input = {}) {
@@ -81,7 +168,7 @@ function analyzeCutepowerIntent(input = {}) {
   const prompt = extractPromptText(input).trim();
   const normalizedPrompt = prompt.toLowerCase();
   const repoGovernanceTerms = [
-    ...AUDIT_PATTERNS,
+    ...AUDIT_INTENT_PATTERNS,
     /\breview\b/,
     /\bwriteback\b/,
     /\bboard_execute\b/,
@@ -93,9 +180,14 @@ function analyzeCutepowerIntent(input = {}) {
     /分析代码/,
     /设计文档/,
   ];
-  const isExplicitCutepowerRequest = matchesAnyPattern(EXPLICIT_CUTEPOWER_PATTERNS, normalizedPrompt)
-    || matchesAnyPattern(AUDIT_PATTERNS, normalizedPrompt);
-  const isRepoGovernanceTask = matchesAnyPattern(repoGovernanceTerms, normalizedPrompt);
+  const auditIntent = hasAuditIntent(normalizedPrompt);
+  const readOnlyIntent = hasReadOnlyIntent(normalizedPrompt);
+  const hookIntegrationFixIntent = hasHookIntegrationFixIntent(normalizedPrompt);
+  const isExplicitCutepowerRequest = matchesAnyPattern(EXPLICIT_CUTEPOWER_PATTERNS, normalizedPrompt);
+  const isRepoGovernanceTask = matchesAnyPattern(repoGovernanceTerms, normalizedPrompt)
+    || auditIntent
+    || hookIntegrationFixIntent
+    || (matchesAnyPattern(DESIGN_REFERENCE_PATTERNS, normalizedPrompt) && readOnlyIntent);
   const isGreetingLike = /^(?:hi|hello|hey|hallo|你好|您好|嗨|哈喽)\b[!\s]*$/i.test(prompt);
   const isGeneralRepoQuestion = /^(?:please\s+)?(?:explain|summarize|describe)\s+(?:this|the)\s+repo\b/i.test(prompt);
 
@@ -104,6 +196,9 @@ function analyzeCutepowerIntent(input = {}) {
     normalized_prompt: normalizedPrompt,
     is_explicit_cutepower_request: isExplicitCutepowerRequest,
     is_repo_governance_task: isRepoGovernanceTask,
+    is_audit_intent: auditIntent,
+    is_read_only_intent: readOnlyIntent,
+    is_hook_integration_fix_intent: hookIntegrationFixIntent,
     is_greeting_like: isGreetingLike,
     is_general_repo_question: isGeneralRepoQuestion,
     should_consider_cutepower: isExplicitCutepowerRequest || isRepoGovernanceTask,
@@ -114,12 +209,12 @@ function normalizeTaskProfile(input = {}) {
   const intent = analyzeCutepowerIntent(input);
   const prompt = intent.normalized_prompt;
   const explicitMode = input.explicit_mode !== false;
-  const requestedIntegrationFix = matchesAnyPattern(HOOK_INTEGRATION_FIX_PATTERNS, prompt)
+  const requestedIntegrationFix = intent.is_hook_integration_fix_intent
     || input.task_type === 'hook_integration_fix';
-  const requestedAudit = matchesAnyPattern(AUDIT_PATTERNS, prompt)
+  const requestedAudit = intent.is_audit_intent
     || input.audit_mode === 'functional_read_only';
   const readOnlyRequested = requestedAudit
-    || matchesAnyPattern(READ_ONLY_PATTERNS, prompt)
+    || intent.is_read_only_intent
     || input.evidence_collection_mode === 'read_only';
 
   return {

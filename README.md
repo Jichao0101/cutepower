@@ -26,6 +26,8 @@ Installation entry:
 - preferred installation is `node scripts/install-plugin.js --mode personal`
 - repo-scoped installation is `node scripts/install-plugin.js --mode repo --target-root <repo-root>`
 - personal installs stage the plugin under `~/.codex/plugins/`; repo installs stage under `<repo-root>/plugins/`
+- installation also registers Codex lifecycle hooks in `.codex/hooks.json`
+- uninstall with `node scripts/uninstall-plugin.js --mode personal` or `node scripts/uninstall-plugin.js --mode repo --target-root <repo-root>` so the staged plugin copy and cutepower hook registrations are cleaned together
 - Do not treat a host knowledge repository as the code root for this project.
 
 Current scope:
@@ -71,7 +73,7 @@ Installed-plugin boundaries:
 
 Runtime hardening coverage:
 
-- explicit mode now defaults to deny for unmapped tool events
+- explicit mode now defaults to `pass_through + not_applicable` for unmapped tool events; only mapped high-risk write/exec paths are denied
 - route/writeback requests are checked against `route_writeback_matrix`
 - review-stage `board_execute` is rejected and board artifact collection is separately gated
 - runtime requests reject legacy `reviewer` aliases
@@ -107,6 +109,7 @@ Validation entries:
 
 ```bash
 node scripts/test-install-plugin.js
+node scripts/test-uninstall-plugin.js
 node scripts/test-codex-hooks.js
 node scripts/test-host-runtime.js
 node scripts/validate-contracts.js

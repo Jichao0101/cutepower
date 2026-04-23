@@ -9,6 +9,7 @@ const {
   coerceHostRuntime,
 } = require('./host-runtime');
 const {
+  assertDecisionStatusPair,
   deny,
   hookError,
   ok,
@@ -60,15 +61,14 @@ function parseJsonOrDefault(value, fallback) {
 }
 
 function readStdin() {
-  return new Promise((resolve) => {
-    let data = '';
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (chunk) => {
-      data += chunk;
-    });
-    process.stdin.on('end', () => resolve(data));
-    process.stdin.resume();
-  });
+  try {
+    return fs.readFileSync(0, 'utf8');
+  } catch (error) {
+    if (error && (error.code === 'EOF' || error.code === 'EAGAIN')) {
+      return '';
+    }
+    throw error;
+  }
 }
 
 function stableStringify(value) {
@@ -101,6 +101,7 @@ function emitHookResponse(hookName, response) {
     protocol_version: 'codex-hook-v1',
     ...response,
   });
+  assertDecisionStatusPair(normalized.decision, normalized.status);
   const json = JSON.stringify(normalized);
   process.stdout.write(`${json}\n`);
   return normalized;
@@ -280,14 +281,23 @@ function buildHookErrorResponse({ payload = {}, hostRuntime, reason, message, di
 }
 
 function mapTopLevelStatus(status, fallback = 'blocked') {
-  if (status === 'ready' || status === 'blocked' || status === 'declined' || status === 'not_applicable' || status === 'error') {
+  if (
+    status === 'ready'
+    || status === 'completed'
+    || status === 'blocked'
+    || status === 'declined'
+    || status === 'denied'
+    || status === 'not_applicable'
+    || status === 'skipped'
+    || status === 'error'
+  ) {
     return status;
   }
   if (status === 'closed') {
-    return 'ready';
+    return 'completed';
   }
   if (status === 'denied') {
-    return 'blocked';
+    return 'denied';
   }
   return fallback;
 }
@@ -582,9 +592,20 @@ function handleStop(payload) {
   };
   if (completionGate.decision === 'allow') {
     return ok(completionGate.reason, {
-      status: mapTopLevelStatus(completionGate.status, 'ready'),
+      status: mapTopLevelStatus(completionGate.status, 'completed'),
       message: 'Stop hook completed with a structured cutepower terminal state.',
       entry_action: 'take_over_for_cutepower',
+      session: buildSessionView(hostRuntime, payload),
+      completion_gate: completionGate,
+      blocked_terminal_package: blockedArtifacts,
+      diagnostics,
+    });
+  }
+  if (completionGate.decision === 'deny') {
+    return deny(completionGate.reason, {
+      status: mapTopLevelStatus(completionGate.status, 'blocked'),
+      message: 'Stop hook is blocked by cutepower terminal-state validation.',
+      action: 'legal_block',
       session: buildSessionView(hostRuntime, payload),
       completion_gate: completionGate,
       blocked_terminal_package: blockedArtifacts,
@@ -596,7 +617,7 @@ function handleStop(payload) {
     hostRuntime,
     reason: completionGate.reason,
     message: 'Stop hook found incomplete cutepower artifacts; host closure is not blocked.',
-    status: mapTopLevelStatus(completionGate.status),
+    status: mapTopLevelStatus(completionGate.status, 'skipped'),
     diagnostics,
     action: 'pass_through',
     completion_gate: completionGate,
@@ -645,9 +666,9 @@ function runHookHandler(hookName, payload = {}) {
   }
 }
 
-async function main() {
+function main() {
   const hookName = normalizeHookName(process.argv[2] || 'Unknown');
-  const stdin = await readStdin();
+  const stdin = readStdin();
   const payload = parseJsonOrDefault(stdin, {});
   const response = runHookHandler(hookName, payload);
   if (response && response.process_exit_code) {

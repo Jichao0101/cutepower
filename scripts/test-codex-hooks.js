@@ -4,8 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-
-const { runHookHandler } = require('./codex-hooks');
+const { spawnSync } = require('child_process');
 
 function makeRepoFixture({ active = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cutepower-hook-'));
@@ -29,57 +28,50 @@ function validateRequiredKeys(schema, value, schemaName) {
   }
 }
 
-function captureHookJson(hookName, payload) {
-  let stdout = '';
-  let stderr = '';
-  const originalStdoutWrite = process.stdout.write;
-  const originalStderrWrite = process.stderr.write;
-  process.stdout.write = (chunk) => {
-    stdout += String(chunk);
-    return true;
-  };
-  process.stderr.write = (chunk) => {
-    stderr += String(chunk);
-    return true;
-  };
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function runHookCli(hookName, payload) {
+  const inputPath = path.join(
+    os.tmpdir(),
+    `cutepower-hook-input-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`
+  );
+  fs.writeFileSync(inputPath, `${JSON.stringify(payload)}\n`, 'utf8');
   try {
-    const returned = runHookHandler(hookName, payload);
-    const trimmed = stdout.trim();
-    assert(trimmed, `${hookName} did not emit stdout`);
-    assert.equal(trimmed.split('\n').length, 1, `${hookName} emitted more than one stdout line`);
+    const command = [
+      'stdout_file=$(mktemp)',
+      'stderr_file=$(mktemp)',
+      `node ${shellQuote(path.join(__dirname, 'codex-hooks.js'))} ${shellQuote(hookName)} < ${shellQuote(inputPath)} >"$stdout_file" 2>"$stderr_file"`,
+      'status=$?',
+      'cat "$stdout_file"',
+      'cat "$stderr_file" >&2',
+      'rm -f "$stdout_file" "$stderr_file"',
+      'exit $status',
+    ].join('; ');
+    const result = spawnSync(
+      '/bin/bash',
+      ['-lc', command],
+      { encoding: 'utf8' }
+    );
+    const stdout = result.stdout.trim();
+    assert(stdout, `${hookName} did not emit stdout`);
+    assert.equal(stdout.split('\n').length, 1, `${hookName} emitted more than one stdout line`);
     return {
-      returned,
-      stdout: trimmed,
-      stderr: stderr.trim(),
-      parsed: JSON.parse(trimmed),
+      status: result.status,
+      signal: result.signal,
+      stdout,
+      stderr: result.stderr.trim(),
+      parsed: JSON.parse(stdout),
     };
   } finally {
-    process.stdout.write = originalStdoutWrite;
-    process.stderr.write = originalStderrWrite;
+    fs.rmSync(inputPath, { force: true });
   }
 }
 
-function testUserPromptSubmitPassesThroughNonTakeoverPromptAsJson() {
-  const repoRoot = makeRepoFixture({ active: false });
-  const result = captureHookJson('UserPromptSubmit', {
-    prompt: 'hello',
-    cwd: repoRoot,
-    session_id: 's-non-takeover',
-  });
-  validateRequiredKeys(
-    readSchema('schemas/hook-responses/user-prompt-submit.json'),
-    result.parsed,
-    'user-prompt-submit'
-  );
-  assert.equal(result.parsed.decision, 'pass_through');
-  assert.equal(result.parsed.status, 'not_applicable');
-  assert.equal(result.parsed.reason, 'non_governance_prompt_passthrough');
-  assert.equal(result.parsed.entry_action, 'pass_through');
-}
-
-function testUserPromptSubmitReturnsStructuredJsonForChineseAuditPrompt() {
+function testChineseAuditPromptRoutesThroughCli() {
   const repoRoot = makeRepoFixture({ active: true });
-  const result = captureHookJson('UserPromptSubmit', {
+  const result = runHookCli('user-prompt-submit', {
     prompt: '严格按照cutepower分析代码是否满足设计文档',
     cwd: repoRoot,
     session_id: 's-cn-audit',
@@ -95,13 +87,40 @@ function testUserPromptSubmitReturnsStructuredJsonForChineseAuditPrompt() {
     result.parsed,
     'user-prompt-submit'
   );
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, '');
   assert.equal(result.parsed.decision, 'allow');
   assert.equal(result.parsed.status, 'ready');
+  assert.equal(result.parsed.runtime_gate.route_resolution.route_id, 'explicit_read_only_functional_audit');
   assert.equal(result.parsed.runtime_gate.capability, 'functional_audit_read_only');
 }
 
-function testPreToolUseUnmappedEventPassesThroughAsJson() {
-  const result = captureHookJson('PreToolUse', {
+function testHookIntegrationPromptStillRoutesToFixCapability() {
+  const repoRoot = makeRepoFixture({ active: true });
+  const result = runHookCli('UserPromptSubmit', {
+    prompt: '修复 codex hook integration',
+    cwd: repoRoot,
+    session_id: 's-hook-fix',
+    authorization: {
+      user_explicitly_authorized: true,
+      project_paths_authorized: true,
+      allowed_paths: ['contracts/', 'scripts/', 'docs/'],
+    },
+  });
+  validateRequiredKeys(
+    readSchema('schemas/hook-responses/user-prompt-submit.json'),
+    result.parsed,
+    'user-prompt-submit'
+  );
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, '');
+  assert.equal(result.parsed.decision, 'allow');
+  assert.equal(result.parsed.runtime_gate.route_resolution.route_id, 'explicit_hook_integration_fix');
+  assert.equal(result.parsed.runtime_gate.capability, 'hook_integration_fix');
+}
+
+function testPreToolUseUnmappedEventPassesThroughCli() {
+  const result = runHookCli('pre-tool-use', {
     command: 'perl -e 1',
     session_id: 's-unmapped',
     route_id: 'explicit_read_only_functional_audit',
@@ -116,15 +135,43 @@ function testPreToolUseUnmappedEventPassesThroughAsJson() {
     result.parsed,
     'pre-tool-use'
   );
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, '');
   assert.equal(result.parsed.decision, 'pass_through');
   assert.equal(result.parsed.status, 'not_applicable');
   assert.equal(result.parsed.reason, 'unmapped_tool_event');
-  assert.equal(result.parsed.action, 'pass_through');
 }
 
-function testStopReturnsStructuredJson() {
-  const result = captureHookJson('Stop', {
-    session_id: 's-stop',
+function testStopIncompleteClosurePassesThroughWithDiagnostics() {
+  const result = runHookCli('stop', {
+    session_id: 's-stop-incomplete',
+    route_id: 'explicit_read_only_functional_audit',
+    phase: 'evidence_collection',
+    capability: 'functional_audit_read_only',
+    evidence_collection_mode: 'read_only',
+    allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
+    allowed_paths: ['contracts/', 'scripts/'],
+    artifacts: {
+      terminal_phase: 'blocked_closed',
+    },
+  });
+  validateRequiredKeys(
+    readSchema('schemas/hook-responses/stop.json'),
+    result.parsed,
+    'stop'
+  );
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, '');
+  assert.equal(result.parsed.decision, 'pass_through');
+  assert.equal(result.parsed.status, 'skipped');
+  assert.equal(result.parsed.reason, 'run_is_not_closed');
+  assert(result.parsed.diagnostics.missing_artifacts.includes('evidence_manifest'));
+  assert(result.parsed.diagnostics.missing_artifacts.includes('review_decision'));
+}
+
+function testStopBlockedTerminalClosedReturnsCompletedPair() {
+  const result = runHookCli('Stop', {
+    session_id: 's-stop-blocked',
     route_id: 'explicit_read_only_functional_audit',
     phase: 'evidence_collection',
     capability: 'functional_audit_read_only',
@@ -143,16 +190,45 @@ function testStopReturnsStructuredJson() {
     result.parsed,
     'stop'
   );
+  assert.equal(result.status, 0);
+  assert.equal(result.stderr, '');
   assert.equal(result.parsed.decision, 'allow');
+  assert.equal(result.parsed.status, 'completed');
   assert.equal(result.parsed.reason, 'blocked_review_terminal_state_closed');
-  assert.equal(result.parsed.completion_gate.reason, 'blocked_review_terminal_state_closed');
+  assert.equal(result.parsed.completion_gate.terminal_outcome, 'blocked');
+}
+
+function testCliExceptionStillEmitsJsonAndNonZeroExit() {
+  const result = runHookCli('user-prompt-submit', {
+    prompt: '严格按照cutepower分析代码是否满足设计文档',
+    cwd: {},
+    session_id: 's-error',
+    evidence_collection_mode: 'read_only',
+    authorization: {
+      user_explicitly_authorized: true,
+      project_paths_authorized: true,
+      allowed_paths: ['contracts/', 'scripts/'],
+    },
+  });
+  validateRequiredKeys(
+    readSchema('schemas/hook-responses/user-prompt-submit.json'),
+    result.parsed,
+    'user-prompt-submit'
+  );
+  assert.notEqual(result.status, 0);
+  assert(result.stderr.includes('[codex-hooks] UserPromptSubmit error'));
+  assert.equal(result.parsed.decision, 'error');
+  assert.equal(result.parsed.status, 'error');
+  assert.equal(result.parsed.reason, 'hook_handler_exception');
 }
 
 function run() {
-  testUserPromptSubmitPassesThroughNonTakeoverPromptAsJson();
-  testUserPromptSubmitReturnsStructuredJsonForChineseAuditPrompt();
-  testPreToolUseUnmappedEventPassesThroughAsJson();
-  testStopReturnsStructuredJson();
+  testChineseAuditPromptRoutesThroughCli();
+  testHookIntegrationPromptStillRoutesToFixCapability();
+  testPreToolUseUnmappedEventPassesThroughCli();
+  testStopIncompleteClosurePassesThroughWithDiagnostics();
+  testStopBlockedTerminalClosedReturnsCompletedPair();
+  testCliExceptionStillEmitsJsonAndNonZeroExit();
   process.stdout.write('test-codex-hooks: ok\n');
 }
 

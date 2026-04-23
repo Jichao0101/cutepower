@@ -144,9 +144,10 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
   ) {
     return {
       decision: 'allow',
-      status: 'blocked',
+      status: 'completed',
       reason: 'blocked_review_terminal_state_closed',
       terminal_phase: terminalPhase,
+      terminal_outcome: 'blocked',
     };
   }
 
@@ -158,9 +159,10 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
   ) {
     return {
       decision: 'allow',
-      status: 'closed',
+      status: 'completed',
       reason: 'review_terminal_state_closed',
       terminal_phase: terminalPhase,
+      terminal_outcome: 'completed',
     };
   }
 
@@ -172,8 +174,8 @@ function evaluateStopGate({ hostRuntime, artifacts = {} }) {
   ];
 
   return {
-    decision: 'deny',
-    status: 'blocked',
+    decision: 'pass_through',
+    status: 'skipped',
     reason: 'run_is_not_closed',
     required,
     terminal_phase: terminalPhase,

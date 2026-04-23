@@ -49,8 +49,9 @@ function testBlockedReviewCanClose() {
     artifacts,
   });
   assert.equal(result.decision, 'allow');
-  assert.equal(result.status, 'blocked');
+  assert.equal(result.status, 'completed');
   assert.equal(result.terminal_phase, 'blocked_closed');
+  assert.equal(result.terminal_outcome, 'blocked');
 }
 
 function testMissingArtifactsStillBlocked() {
@@ -61,7 +62,8 @@ function testMissingArtifactsStillBlocked() {
     },
     artifacts: {},
   });
-  assert.equal(result.decision, 'deny');
+  assert.equal(result.decision, 'pass_through');
+  assert.equal(result.status, 'skipped');
   assert.equal(result.reason, 'run_is_not_closed');
 }
 

@@ -1,5 +1,11 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
+const { writeArtifact } = require('./run-artifacts');
+const { buildGovernanceVerdict } = require('./hook-response');
+
 function matchesAnyPattern(patterns, value) {
   return patterns.some((pattern) => pattern.test(value));
 }
@@ -400,6 +406,7 @@ function buildRuntimeGate(input = {}) {
   }
 
   return {
+    session_id: input.session_id || input.sessionId || null,
     status: 'ready',
     task_profile,
     route_resolution,
@@ -413,11 +420,133 @@ function buildRuntimeGate(input = {}) {
   };
 }
 
+function ensureSessionId(input = {}) {
+  return input.session_id
+    || input.sessionId
+    || `cutepower-${Date.now()}-${process.pid}`;
+}
+
+function resolveWorkspaceRoot(input = {}) {
+  const candidate = input.cwd
+    || input.working_directory
+    || input.workspace_root
+    || input.repo_root
+    || input.project_root
+    || (input.input && (
+      input.input.cwd
+      || input.input.working_directory
+      || input.input.workspace_root
+      || input.input.repo_root
+    ))
+    || process.cwd();
+
+  if (typeof candidate !== 'string' || candidate.trim() === '') {
+    throw new TypeError('workspace_root_must_be_a_non_empty_string');
+  }
+  return path.resolve(candidate);
+}
+
+function persistPreflightArtifacts(input = {}, runtimeGate) {
+  const sessionId = ensureSessionId(input);
+  const workspaceRoot = resolveWorkspaceRoot(input);
+  const artifactRoot = path.join(workspaceRoot, '.cutepower');
+  const taskProfilePath = writeArtifact(artifactRoot, sessionId, 'task_profile', runtimeGate.task_profile);
+  const routeResolutionPath = writeArtifact(artifactRoot, sessionId, 'route_resolution', runtimeGate.route_resolution);
+  const runtimeGatePath = writeArtifact(
+    artifactRoot,
+    sessionId,
+    'runtime_gate',
+    {
+      ...runtimeGate,
+      session_id: sessionId,
+      artifact_dir: path.join(artifactRoot, 'run', sessionId),
+    }
+  );
+  return {
+    session_id: sessionId,
+    workspace_root: workspaceRoot,
+    artifact_dir: path.join(artifactRoot, 'run', sessionId),
+    persisted_artifacts: {
+      task_profile: fs.existsSync(taskProfilePath),
+      route_resolution: fs.existsSync(routeResolutionPath),
+      runtime_gate: fs.existsSync(runtimeGatePath),
+    },
+  };
+}
+
+function evaluateIntake(input = {}) {
+  const sessionId = ensureSessionId(input);
+  const runtimeGate = buildRuntimeGate({
+    ...input,
+    session_id: sessionId,
+  });
+  const persisted = persistPreflightArtifacts(
+    {
+      ...input,
+      session_id: sessionId,
+    },
+    runtimeGate
+  );
+  const requiredArtifacts = runtimeGate.required_preflight_outputs || [
+    'task_profile',
+    'route_resolution',
+    'runtime_gate',
+  ];
+  const missingArtifacts = requiredArtifacts.filter((name) => !persisted.persisted_artifacts[name]);
+  const gateResult = runtimeGate.status === 'ready'
+    ? (missingArtifacts.length === 0 ? 'ready' : 'blocked')
+    : runtimeGate.status === 'declined'
+      ? 'declined'
+      : 'blocked';
+  const allowedToContinue = gateResult === 'ready';
+  return buildGovernanceVerdict('user_prompt_submit', {
+    gate_result: gateResult,
+    allowed_to_continue: allowedToContinue,
+    reason: gateResult === 'ready'
+      ? 'cutepower_takeover_ready'
+      : gateResult === 'declined'
+        ? 'cutepower_takeover_requested_but_no_supported_route'
+        : missingArtifacts.length > 0
+          ? 'required_preflight_artifacts_missing'
+          : 'cutepower_takeover_blocked_by_runtime_gate',
+    required_artifacts: requiredArtifacts,
+    missing_artifacts: missingArtifacts,
+    allowed_actions: runtimeGate.allowed_actions || [],
+    session: {
+      session_id: sessionId,
+      route_id: runtimeGate.route_resolution ? runtimeGate.route_resolution.route_id : null,
+      phase: runtimeGate.phase || null,
+      capability: runtimeGate.capability || null,
+    },
+    runtime_gate: {
+      ...runtimeGate,
+      session_id: sessionId,
+      artifact_dir: persisted.artifact_dir,
+    },
+    diagnostics: {
+      task_profile: runtimeGate.task_profile,
+      route_resolution: runtimeGate.route_resolution,
+      runtime_gate_status: runtimeGate.status,
+      blocking_reasons: runtimeGate.blocking_reasons || [],
+      artifact_dir: persisted.artifact_dir,
+      persisted_artifacts: persisted.persisted_artifacts,
+    },
+    entry_action: allowedToContinue ? 'take_over_for_cutepower' : 'legal_block',
+    message: allowedToContinue
+      ? 'cutepower takeover is ready.'
+      : 'cutepower takeover is blocked before downstream execution.',
+  });
+}
+
 module.exports = {
   analyzeCutepowerIntent,
   buildRuntimeGate,
+  ensureSessionId,
+  evaluateIntake,
   extractAuthorization,
   extractPromptText,
   normalizeTaskProfile,
+  persistPreflightArtifacts,
   resolveRoute,
+  resolveWorkspaceRoot,
 };

@@ -6,6 +6,8 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+const { writeArtifact } = require('./run-artifacts');
+
 function makeRepoFixture({ active = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cutepower-hook-'));
   if (active) {
@@ -69,7 +71,24 @@ function runHookCli(hookName, payload) {
   }
 }
 
-function testChineseAuditPromptRoutesThroughCli() {
+function seedPreflightArtifacts(repoRoot, sessionId, routeId, capability, gateStatus = 'ready') {
+  const artifactRoot = path.join(repoRoot, '.cutepower');
+  writeArtifact(artifactRoot, sessionId, 'task_profile', { primary_type: capability });
+  writeArtifact(artifactRoot, sessionId, 'route_resolution', { route_id: routeId, phase: 'evidence_collection' });
+  writeArtifact(artifactRoot, sessionId, 'runtime_gate', {
+    session_id: sessionId,
+    status: gateStatus,
+    route_resolution: { route_id: routeId, phase: 'evidence_collection' },
+    phase: 'evidence_collection',
+    capability,
+    allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
+    allowed_paths: ['contracts/', 'scripts/'],
+    evidence_collection_mode: 'read_only',
+    required_preflight_outputs: ['task_profile', 'route_resolution', 'runtime_gate'],
+  });
+}
+
+function testUserPromptSubmitReadyIssuesCapability() {
   const repoRoot = makeRepoFixture({ active: true });
   const result = runHookCli('user-prompt-submit', {
     prompt: '严格按照cutepower分析代码是否满足设计文档',
@@ -92,68 +111,110 @@ function testChineseAuditPromptRoutesThroughCli() {
   assert.equal(result.parsed.decision, 'allow');
   assert.equal(result.parsed.status, 'ready');
   assert.equal(result.parsed.runtime_gate.route_resolution.route_id, 'explicit_read_only_functional_audit');
-  assert.equal(result.parsed.runtime_gate.capability, 'functional_audit_read_only');
+  assert.equal(result.parsed.session_capability.session_id, 's-cn-audit');
 }
 
-function testHookIntegrationPromptStillRoutesToFixCapability() {
+function testUserPromptSubmitFailureDoesNotIssueCapabilityAndBlocksLaterToolUse() {
   const repoRoot = makeRepoFixture({ active: true });
-  const result = runHookCli('UserPromptSubmit', {
+  const submit = runHookCli('UserPromptSubmit', {
     prompt: '修复 codex hook integration',
     cwd: repoRoot,
-    session_id: 's-hook-fix',
+    session_id: 's-hook-fail',
     authorization: {
-      user_explicitly_authorized: true,
-      project_paths_authorized: true,
-      allowed_paths: ['contracts/', 'scripts/', 'docs/'],
+      user_explicitly_authorized: false,
+      project_paths_authorized: false,
     },
   });
-  validateRequiredKeys(
-    readSchema('schemas/hook-responses/user-prompt-submit.json'),
-    result.parsed,
-    'user-prompt-submit'
-  );
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, '');
-  assert.equal(result.parsed.decision, 'allow');
-  assert.equal(result.parsed.runtime_gate.route_resolution.route_id, 'explicit_hook_integration_fix');
-  assert.equal(result.parsed.runtime_gate.capability, 'hook_integration_fix');
-}
+  assert.equal(submit.status, 0);
+  assert.equal(submit.parsed.decision, 'deny');
+  assert.equal(submit.parsed.status, 'blocked');
+  assert.equal(submit.parsed.session_capability, null);
 
-function testPreToolUseUnmappedEventPassesThroughCli() {
-  const result = runHookCli('pre-tool-use', {
-    command: 'perl -e 1',
-    session_id: 's-unmapped',
-    route_id: 'explicit_read_only_functional_audit',
-    phase: 'evidence_collection',
-    capability: 'functional_audit_read_only',
-    evidence_collection_mode: 'read_only',
-    allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
-    allowed_paths: ['contracts/', 'scripts/'],
+  const preTool = runHookCli('PreToolUse', {
+    cwd: repoRoot,
+    session_id: 's-hook-fail',
+    command: 'bash -lc whoami',
   });
   validateRequiredKeys(
     readSchema('schemas/hook-responses/pre-tool-use.json'),
-    result.parsed,
+    preTool.parsed,
     'pre-tool-use'
   );
-  assert.equal(result.status, 0);
-  assert.equal(result.stderr, '');
-  assert.equal(result.parsed.decision, 'pass_through');
-  assert.equal(result.parsed.status, 'not_applicable');
-  assert.equal(result.parsed.reason, 'unmapped_tool_event');
+  assert.equal(preTool.status, 0);
+  assert.equal(preTool.parsed.decision, 'deny');
+  assert.equal(preTool.parsed.status, 'blocked');
+  assert.equal(preTool.parsed.reason, 'current_session_missing_valid_capability');
 }
 
-function testStopIncompleteClosurePassesThroughWithDiagnostics() {
+function testPreToolUseDeniesHighRiskActionWithoutRuntimeGateArtifact() {
+  const repoRoot = makeRepoFixture({ active: true });
+  writeArtifact(path.join(repoRoot, '.cutepower'), 's-no-gate', 'task_profile', { primary_type: 'functional_audit' });
+  writeArtifact(path.join(repoRoot, '.cutepower'), 's-no-gate', 'route_resolution', { route_id: 'explicit_read_only_functional_audit' });
+  const result = runHookCli('pre-tool-use', {
+    cwd: repoRoot,
+    session_id: 's-no-gate',
+    route_id: 'explicit_read_only_functional_audit',
+    phase: 'evidence_collection',
+    capability: 'functional_audit_read_only',
+    evidence_collection_mode: 'read_only',
+    allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
+    allowed_paths: ['contracts/', 'scripts/'],
+    session_capability: {
+      session_id: 's-no-gate',
+      route_id: 'explicit_read_only_functional_audit',
+      phase: 'evidence_collection',
+      capability: 'functional_audit_read_only',
+      allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
+      required_artifacts: ['task_profile', 'route_resolution', 'runtime_gate'],
+    },
+    command: 'sed -n 1,20p contracts/gate-matrix.yaml',
+  });
+  assert.equal(result.status, 0);
+  assert.equal(result.parsed.decision, 'deny');
+  assert.equal(result.parsed.reason, 'required_runtime_artifacts_missing');
+  assert(result.parsed.guard_result.missing_artifacts.includes('runtime_gate'));
+}
+
+function testPreToolUseDeniesUnmappedHighRiskExec() {
+  const repoRoot = makeRepoFixture({ active: true });
+  seedPreflightArtifacts(
+    repoRoot,
+    's-unmapped',
+    'explicit_read_only_functional_audit',
+    'functional_audit_read_only'
+  );
+  const result = runHookCli('pre-tool-use', {
+    cwd: repoRoot,
+    session_id: 's-unmapped',
+    session_capability: {
+      session_id: 's-unmapped',
+      route_id: 'explicit_read_only_functional_audit',
+      phase: 'evidence_collection',
+      capability: 'functional_audit_read_only',
+      allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
+      required_artifacts: ['task_profile', 'route_resolution', 'runtime_gate'],
+    },
+    command: 'perl -e 1',
+  });
+  assert.equal(result.status, 0);
+  assert.equal(result.parsed.decision, 'deny');
+  assert.equal(result.parsed.reason, 'unmapped_high_risk_tool_event_denied');
+}
+
+function testStopAfterFailureCannotPretendCompleted() {
+  const repoRoot = makeRepoFixture({ active: true });
+  runHookCli('UserPromptSubmit', {
+    prompt: '修复 codex hook integration',
+    cwd: repoRoot,
+    session_id: 's-stop-fail',
+    authorization: {
+      user_explicitly_authorized: false,
+      project_paths_authorized: false,
+    },
+  });
   const result = runHookCli('stop', {
-    session_id: 's-stop-incomplete',
-    route_id: 'explicit_read_only_functional_audit',
-    phase: 'evidence_collection',
-    capability: 'functional_audit_read_only',
-    evidence_collection_mode: 'read_only',
-    allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
-    allowed_paths: ['contracts/', 'scripts/'],
-    artifacts: {
-      terminal_phase: 'blocked_closed',
-    },
+    cwd: repoRoot,
+    session_id: 's-stop-fail',
   });
   validateRequiredKeys(
     readSchema('schemas/hook-responses/stop.json'),
@@ -161,41 +222,29 @@ function testStopIncompleteClosurePassesThroughWithDiagnostics() {
     'stop'
   );
   assert.equal(result.status, 0);
-  assert.equal(result.stderr, '');
-  assert.equal(result.parsed.decision, 'pass_through');
-  assert.equal(result.parsed.status, 'skipped');
-  assert.equal(result.parsed.reason, 'run_is_not_closed');
-  assert(result.parsed.diagnostics.missing_artifacts.includes('evidence_manifest'));
-  assert(result.parsed.diagnostics.missing_artifacts.includes('review_decision'));
+  assert.notEqual(result.parsed.status, 'completed');
+  assert(['skipped', 'blocked', 'error', 'not_applicable'].includes(result.parsed.status));
 }
 
-function testStopBlockedTerminalClosedReturnsCompletedPair() {
-  const result = runHookCli('Stop', {
-    session_id: 's-stop-blocked',
-    route_id: 'explicit_read_only_functional_audit',
-    phase: 'evidence_collection',
-    capability: 'functional_audit_read_only',
-    evidence_collection_mode: 'read_only',
-    allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
-    allowed_paths: ['contracts/', 'scripts/'],
-    artifacts: {
-      evidence_manifest: { status: 'blocked' },
-      review_decision: { decision: 'blocked' },
-      writeback_declined: { status: 'declined' },
-      terminal_phase: 'blocked_closed',
-    },
-  });
-  validateRequiredKeys(
-    readSchema('schemas/hook-responses/stop.json'),
-    result.parsed,
-    'stop'
+function testStopCompletedOnlyWithLegalClosure() {
+  const repoRoot = makeRepoFixture({ active: true });
+  seedPreflightArtifacts(
+    repoRoot,
+    's-stop-ok',
+    'explicit_read_only_functional_audit',
+    'functional_audit_read_only'
   );
+  writeArtifact(path.join(repoRoot, '.cutepower'), 's-stop-ok', 'evidence_manifest', { status: 'complete' });
+  writeArtifact(path.join(repoRoot, '.cutepower'), 's-stop-ok', 'review_decision', { decision: 'approved' });
+  writeArtifact(path.join(repoRoot, '.cutepower'), 's-stop-ok', 'writeback_declined', { status: 'declined' });
+  writeArtifact(path.join(repoRoot, '.cutepower'), 's-stop-ok', 'terminal_phase', 'closed');
+  const result = runHookCli('Stop', {
+    cwd: repoRoot,
+    session_id: 's-stop-ok',
+  });
   assert.equal(result.status, 0);
-  assert.equal(result.stderr, '');
   assert.equal(result.parsed.decision, 'allow');
   assert.equal(result.parsed.status, 'completed');
-  assert.equal(result.parsed.reason, 'blocked_review_terminal_state_closed');
-  assert.equal(result.parsed.completion_gate.terminal_outcome, 'blocked');
 }
 
 function testCliExceptionStillEmitsJsonAndNonZeroExit() {
@@ -223,11 +272,12 @@ function testCliExceptionStillEmitsJsonAndNonZeroExit() {
 }
 
 function run() {
-  testChineseAuditPromptRoutesThroughCli();
-  testHookIntegrationPromptStillRoutesToFixCapability();
-  testPreToolUseUnmappedEventPassesThroughCli();
-  testStopIncompleteClosurePassesThroughWithDiagnostics();
-  testStopBlockedTerminalClosedReturnsCompletedPair();
+  testUserPromptSubmitReadyIssuesCapability();
+  testUserPromptSubmitFailureDoesNotIssueCapabilityAndBlocksLaterToolUse();
+  testPreToolUseDeniesHighRiskActionWithoutRuntimeGateArtifact();
+  testPreToolUseDeniesUnmappedHighRiskExec();
+  testStopAfterFailureCannotPretendCompleted();
+  testStopCompletedOnlyWithLegalClosure();
   testCliExceptionStillEmitsJsonAndNonZeroExit();
   process.stdout.write('test-codex-hooks: ok\n');
 }

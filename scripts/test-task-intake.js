@@ -1,7 +1,10 @@
 'use strict';
 
 const assert = require('assert');
-const { analyzeCutepowerIntent, buildRuntimeGate } = require('./task-intake');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { analyzeCutepowerIntent, buildRuntimeGate, evaluateIntake } = require('./task-intake');
 
 function testExplicitReadOnlyAuditGetsReadyGateWithAuthorization() {
   const gate = buildRuntimeGate({
@@ -73,11 +76,34 @@ function testGeneralPromptDoesNotRequestCutepowerGovernance() {
   assert.equal(intent.should_consider_cutepower, false);
 }
 
+function testEvaluateIntakePersistsRequiredPreflightArtifacts() {
+  const repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cutepower-intake-'));
+  fs.mkdirSync(path.join(repoRoot, 'contracts'), { recursive: true });
+  fs.mkdirSync(path.join(repoRoot, 'scripts'), { recursive: true });
+  fs.mkdirSync(path.join(repoRoot, '.codex-plugin'), { recursive: true });
+  fs.writeFileSync(path.join(repoRoot, '.codex-plugin', 'plugin.json'), '{}\n', 'utf8');
+  const verdict = evaluateIntake({
+    session_id: 's-intake',
+    cwd: repoRoot,
+    prompt: '修复 codex hook integration',
+    authorization: {
+      user_explicitly_authorized: true,
+      project_paths_authorized: true,
+      allowed_paths: ['contracts/', 'scripts/', 'docs/'],
+    },
+  });
+  assert.equal(verdict.gate_result, 'ready');
+  assert.equal(fs.existsSync(path.join(repoRoot, '.cutepower', 'run', 's-intake', 'task_profile.json')), true);
+  assert.equal(fs.existsSync(path.join(repoRoot, '.cutepower', 'run', 's-intake', 'route_resolution.json')), true);
+  assert.equal(fs.existsSync(path.join(repoRoot, '.cutepower', 'run', 's-intake', 'runtime_gate.json')), true);
+}
+
 function run() {
   testExplicitReadOnlyAuditGetsReadyGateWithAuthorization();
   testChineseAuditPromptRoutesToReadOnlyCapability();
   testHookIntegrationFixStillWinsForHookRepairPrompt();
   testGeneralPromptDoesNotRequestCutepowerGovernance();
+  testEvaluateIntakePersistsRequiredPreflightArtifacts();
   process.stdout.write('test-task-intake: ok\n');
 }
 

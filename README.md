@@ -61,10 +61,11 @@ Installed-plugin boundaries:
 - `agents/*.toml` is a compatibility bridge, not a policy source
 - `scripts/validate-contracts.js` provides static contract validation
 - `scripts/task-profile.js` provides natural-language task normalization into a routed task profile
-- `scripts/task-intake.js` provides the default-entry intake/preflight layer, allocates `session_id`, and writes repo-local preflight artifacts under `.cutepower/run/<session_id>/`
-- `scripts/host-runtime.js` provides host-side explicit-mode session-context injection and issues session capabilities bound to `session_id`, `route_id`, `phase`, and `allowed_actions`
-- `scripts/runtime-gates.js` provides action-front runtime admission checks for route, role, review, writeback, capability, phase, and artifact existence/schema
-- `scripts/codex-hooks.js` wires Codex lifecycle hooks to `host-runtime` and `runtime-gates` through workspace-scoped hook state and stop-time completion gating
+- `scripts/task-intake.js` provides the default-entry intake/preflight layer, allocates `session_id`, writes repo-local preflight artifacts under `.cutepower/run/<session_id>/`, and blocks takeover when the minimum preflight set cannot be established
+- `scripts/host-runtime.js` provides host-side explicit-mode session-context injection, loads persisted runtime gate state, and issues session capabilities bound to `session_id`, `route_id`, `phase`, and `allowed_actions`
+- `scripts/runtime-gates.js` provides action-front runtime admission checks for route, capability, phase, and artifact existence; `PreToolUse` now hard-stops on missing capability, non-ready gate state, or missing required artifacts
+- `scripts/codex-host-adapter.js` is the thin host protocol adapter: stdin/stdout/stderr, hook-event dispatch, and mapping internal governance verdicts to host-compatible JSON
+- `scripts/codex-hooks.js` is the CLI entry that invokes the host adapter
 - `scripts/run-artifacts.js` manages repo-local run-state artifacts and schema validation
 - `schemas/run-artifacts/` defines stable runtime artifact schemas
 - `scripts/test-runtime-gates.js` provides positive and negative gate checks
@@ -73,14 +74,16 @@ Installed-plugin boundaries:
 
 Runtime hardening coverage:
 
-- explicit mode now defaults to `pass_through + not_applicable` for unmapped tool events; only mapped high-risk write/exec paths are denied
+- `UserPromptSubmit` now hard-stops when intake fails, route resolution is unsupported, runtime gate is not ready, or the minimum preflight artifacts cannot be persisted
+- `PreToolUse` now hard-stops when session capability is missing/invalid, `runtime_gate.json` is missing, required preflight artifacts are absent, or a high-risk tool event is unmapped
+- explicit mode only allows `pass_through + not_applicable` for low-risk non-governed cases; it does not pass through high-risk unknown execution
 - route/writeback requests are checked against `route_writeback_matrix`
 - review-stage `board_execute` is rejected and board artifact collection is separately gated
 - runtime requests reject legacy `reviewer` aliases
 - repo-reviewer, functional-reviewer, and incident-investigator stay separated by route and action gates
 - protected business execution, review, and writeback now require a host-issued session capability
 - ready-state execution now depends on repo-local preflight artifacts instead of session-context hints alone
-- stop-hook success now depends on legal terminal state plus required closure artifacts:
+- `Stop` cannot convert an earlier failure into `completed`; success now depends on legal terminal state plus required closure artifacts:
   - `evidence_manifest`
   - `review_decision` when review is required
   - `writeback_receipt` or `writeback_declined` when writeback is required

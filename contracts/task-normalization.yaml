@@ -51,7 +51,6 @@
       "mandatory_dispatcher_skill": "using-cutepower",
       "intake_script": "scripts/task-intake.js",
       "route_resolution_output": "route_resolution",
-      "blocking_gaps_output": "blocking_gaps",
       "runtime_gate_output": "runtime_gate",
       "dispatch_output": "dispatch_manifest",
       "explicit_mode_keywords": [

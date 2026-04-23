@@ -92,9 +92,9 @@ function isFunctionalReviewSession(hostRuntime, artifacts = {}) {
   const routeId = String(hostRuntime?.route_id || '');
   const capability = String(hostRuntime?.capability || '');
   const taskProfile = artifacts.task_profile || null;
-  return routeId === 'explicit_read_only_functional_audit'
+  return routeId === 'audit_functional_read_only'
     || capability === 'functional_audit_read_only'
-    || taskProfile?.primary_type === 'functional_audit';
+    || taskProfile?.primary_type === 'audit';
 }
 
 function validateFunctionalReviewArtifacts(artifacts = {}) {

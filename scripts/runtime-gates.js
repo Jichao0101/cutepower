@@ -80,10 +80,10 @@ function gateToolAction({ action, hostRuntime, command, targetPaths = [] }) {
         reason: 'route_missing_authorized_business_context_read',
       };
     }
-    if (!['evidence_collection', 'implementation'].includes(hostRuntime.phase)) {
+    if (!['analysis', 'implementation', 'review'].includes(hostRuntime.phase)) {
       return {
         gate_result: 'blocked',
-        reason: 'authorized_business_context_read_outside_evidence_collection_phase',
+        reason: 'authorized_business_context_read_outside_read_or_implementation_phase',
       };
     }
     if (!['read_only', 'implementation'].includes(hostRuntime.evidence_collection_mode)) {
@@ -555,7 +555,7 @@ function inferToolActionFromCommand(payload, hostRuntime) {
     ) {
       return {
         action: 'authorized_business_context_read',
-        reason: 'read_only_audit_evidence_collection_authorized',
+      reason: 'read_only_audit_evidence_collection_authorized',
         command,
         target_paths: [],
         risk_level: 'low',

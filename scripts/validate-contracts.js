@@ -106,7 +106,6 @@ function main() {
     "mandatory_dispatcher_skill",
     "intake_script",
     "route_resolution_output",
-    "blocking_gaps_output",
     "runtime_gate_output",
     "dispatch_output",
     "protected_execution_skills"

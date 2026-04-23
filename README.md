@@ -104,8 +104,6 @@ Run-state model:
   - `route_resolution.json`
   - `dispatch_manifest.json`
   - `runtime_gate.json`
-  - `context_requirements.json`
-  - `blocking_gaps.json`
   - `evidence_manifest.json`
   - `review_decision.json`
   - `writeback_receipt.json`

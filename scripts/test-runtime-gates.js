@@ -19,7 +19,7 @@ function makeHostRuntime(overrides = {}) {
     session_id: 's-runtime',
     workspace_root: overrides.workspace_root || null,
     route_id: 'audit_functional_read_only',
-    phase: 'evidence_collection',
+    phase: 'analysis',
     capability: 'functional_audit_read_only',
     evidence_collection_mode: 'read_only',
     allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
@@ -30,7 +30,7 @@ function makeHostRuntime(overrides = {}) {
     session_capability: {
       session_id: 's-runtime',
       route_id: 'audit_functional_read_only',
-      phase: 'evidence_collection',
+      phase: 'analysis',
       capability: 'functional_audit_read_only',
       allowed_actions: ['runtime_discovery_read', 'authorized_business_context_read'],
       required_artifacts: ['task_profile', 'route_resolution', 'dispatch_manifest', 'runtime_gate'],
@@ -41,12 +41,12 @@ function makeHostRuntime(overrides = {}) {
 
 function seedPreflightArtifacts(workspaceRoot, sessionId, runtimeGateStatus = 'ready') {
   const artifactRoot = path.join(workspaceRoot, '.cutepower');
-  writeArtifact(artifactRoot, sessionId, 'task_profile', { primary_type: 'functional_audit' });
+  writeArtifact(artifactRoot, sessionId, 'task_profile', { primary_type: 'audit' });
   writeArtifact(artifactRoot, sessionId, 'route_resolution', { route_id: 'audit_functional_read_only' });
   writeArtifact(artifactRoot, sessionId, 'dispatch_manifest', {
     session_id: sessionId,
     route_id: 'audit_functional_read_only',
-    current_phase: 'evidence_collection',
+    current_phase: 'analysis',
     current_skill: 'using-cutepower',
     next_skill: 'cute-scope-plan',
   });
@@ -83,7 +83,7 @@ function testHighRiskToolDeniedWithoutCapability() {
 
 function testMissingRuntimeGateArtifactBlocksToolUse() {
   const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cutepower-runtime-'));
-  writeArtifact(path.join(workspaceRoot, '.cutepower'), 's-runtime', 'task_profile', { primary_type: 'functional_audit' });
+  writeArtifact(path.join(workspaceRoot, '.cutepower'), 's-runtime', 'task_profile', { primary_type: 'audit' });
   writeArtifact(path.join(workspaceRoot, '.cutepower'), 's-runtime', 'route_resolution', { route_id: 'audit_functional_read_only' });
   const result = evaluateToolUseVerdict({
     payload: {

@@ -34,7 +34,7 @@
       "required_preconditions": [
         "writeback_state_reached",
         "route_writeback_requirements_satisfied",
-        "independent_writeback_adjudication"
+        "authority_bounded_writeback_adjudication"
       ],
       "forbidden_targets": [
         "external_truth_store"
@@ -52,7 +52,7 @@
       "allowed_writeback_level": "project_current_update",
       "required_preconditions": [
         "review_pass_recorded",
-        "independent_writeback_adjudication"
+        "authority_bounded_writeback_adjudication"
       ]
     },
     {
@@ -66,7 +66,7 @@
       "required_preconditions": [
         "board_evidence_recorded_when_required",
         "review_pass_recorded",
-        "independent_writeback_adjudication"
+        "authority_bounded_writeback_adjudication"
       ]
     },
     {
@@ -79,7 +79,7 @@
       "allowed_writeback_level": "project_current_update",
       "required_preconditions": [
         "review_pass_recorded",
-        "independent_writeback_adjudication"
+        "authority_bounded_writeback_adjudication"
       ]
     },
     {
@@ -93,7 +93,7 @@
       "required_preconditions": [
         "board_evidence_recorded_when_required",
         "review_pass_recorded",
-        "independent_writeback_adjudication"
+        "authority_bounded_writeback_adjudication"
       ]
     },
     {
@@ -106,7 +106,7 @@
       "allowed_writeback_level": "project_current_update",
       "required_preconditions": [
         "review_pass_recorded",
-        "independent_writeback_adjudication"
+        "authority_bounded_writeback_adjudication"
       ]
     },
     {
@@ -120,7 +120,7 @@
       "required_preconditions": [
         "board_evidence_recorded_when_required",
         "review_pass_recorded",
-        "independent_writeback_adjudication"
+        "authority_bounded_writeback_adjudication"
       ]
     },
     {

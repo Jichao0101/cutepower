@@ -32,6 +32,9 @@ function testBuildHostRuntimeCarriesArtifactContract() {
     'runtime_gate',
     'dispatch_manifest',
   ]);
+  assert.equal(runtime.action_guard.review_independence_model, 'procedural');
+  assert.equal(runtime.action_guard.writeback_closure_model, 'authority_bounded');
+  assert.equal(runtime.action_guard.executor_identity_separation_enforced, false);
 }
 
 function testCoerceHostRuntimePreservesReadOnlyAuditCapability() {

@@ -111,8 +111,9 @@ function buildHostRuntime(input = {}) {
       explicit_mode: runtimeGate.task_profile
         ? runtimeGate.task_profile.explicit_mode
         : input.explicit_mode !== false,
-      reviewer_independence_required: true,
-      writeback_independence_required: true,
+      review_independence_model: 'procedural',
+      writeback_closure_model: 'authority_bounded',
+      executor_identity_separation_enforced: false,
     },
   };
 }

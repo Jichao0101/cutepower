@@ -103,7 +103,7 @@
       ],
       "stop_conditions": [
         "missing_review_package",
-        "missing_independent_review_stage",
+        "missing_procedural_review_stage",
         "missing_required_evidence"
       ]
     },
@@ -134,7 +134,7 @@
         "missing_requirements_package",
         "missing_acceptance_items",
         "evidence_insufficient_for_decision",
-        "missing_independent_review_stage"
+        "missing_procedural_review_stage"
       ]
     },
     {

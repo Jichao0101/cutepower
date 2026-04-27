@@ -45,12 +45,14 @@
         }
       ],
       "independence_requirements": {
-        "separate_reviewer_stage_or_instance": true,
+        "independence_model": "procedural",
+        "separate_reviewer_stage": true,
+        "executor_identity_separation_enforced": false,
         "author_self_review_forbidden": true,
         "use_minimum_evidence_package": true,
         "allow_full_author_context": false,
         "allow_full_author_reasoning": false,
-        "require_explicit_reviewer_identity": true
+        "record_reviewer_role": true
       },
       "missing_evidence_behavior": {
         "allow_outcomes": [
@@ -106,12 +108,14 @@
         }
       ],
       "independence_requirements": {
-        "separate_reviewer_stage_or_instance": true,
+        "independence_model": "procedural",
+        "separate_reviewer_stage": true,
+        "executor_identity_separation_enforced": false,
         "author_self_review_forbidden": true,
         "use_minimum_evidence_package": true,
         "allow_full_author_context": false,
         "allow_full_author_reasoning": false,
-        "require_explicit_reviewer_identity": true
+        "record_reviewer_role": true
       },
       "missing_evidence_behavior": {
         "allow_outcomes": [

@@ -5,7 +5,7 @@ description: Close the governed route by applying the allowed writeback level af
 
 # Goal
 
-Record the allowed closure outcome without widening writeback authority.
+Record the allowed closure outcome without widening writeback authority. Writeback is an authority-bounded closure stage, not a runtime-created independent writer executor.
 
 # Contracts
 
@@ -46,7 +46,7 @@ Record the allowed closure outcome without widening writeback authority.
 
 - missing writeback preconditions
 - route does not allow current writeback target
-- independent adjudication not available
+- authority-bounded closure preconditions not available
 
 # Do Not Do
 

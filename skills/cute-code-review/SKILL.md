@@ -1,11 +1,11 @@
 ---
 name: cute-code-review
-description: Perform independent repo review for the governed route and emit the review decision artifact.
+description: Perform procedural repo review for the governed route and emit the review decision artifact.
 ---
 
 # Goal
 
-Provide independent repo review without inheriting author authority.
+Provide role-bounded repo review without inheriting author authority. Independence here is procedural: this skill requires a separate review stage, minimum evidence, and reviewer-role boundaries; it does not imply that runtime automatically creates or verifies a separate executor identity.
 
 # Contracts
 
@@ -41,12 +41,12 @@ Provide independent repo review without inheriting author authority.
 
 # Phase Exit / Next Skill
 
-- Exit to `cute-writeback` only after an independent review decision exists.
+- Exit to `cute-writeback` only after a procedural review decision exists.
 
 # Stop Conditions
 
 - missing review package
-- missing independent review stage
+- missing procedural review stage
 - missing required evidence
 
 # Do Not Do

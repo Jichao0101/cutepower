@@ -1,11 +1,11 @@
 ---
 name: cute-functional-review
-description: Perform independent functional review against routed requirements and evidence packages.
+description: Perform procedural functional review against routed requirements and evidence packages.
 ---
 
 # Goal
 
-Adjudicate functional compliance using the minimum legal evidence package.
+Adjudicate functional compliance using the minimum legal evidence package. Independence here is procedural: this skill requires a separate review stage, minimum evidence, and reviewer-role boundaries; it does not imply that runtime automatically creates or verifies a separate executor identity.
 
 # Contracts
 
@@ -50,7 +50,7 @@ Adjudicate functional compliance using the minimum legal evidence package.
 
 - missing requirements package
 - evidence insufficient for decision
-- missing independent review stage
+- missing procedural review stage
 
 # Do Not Do
 

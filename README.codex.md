@@ -1,6 +1,6 @@
 # 1 cutepower for Codex
 
-cutepower is a governance plugin centered on skill-first workflow discipline, contracts-first truth, and runtime-gate enforcement.
+cutepower is an installable governance plugin centered on skill-first workflow discipline, contracts-first truth, and runtime-gate enforcement.
 
 If cutepower is not installed yet, tell Codex:
 
@@ -20,6 +20,7 @@ Current repository note:
 
 - the current repository is the development source, not the default runtime install source
 - install cutepower into a user or repo plugin directory before treating it as runtime truth
+- plugin packaging is the distribution and installation layer; the architecture layer is skill-first workflow discipline, contracts-first truth, and runtime-gate enforcement
 - Do not treat a host knowledge repository as the code root for this project.
 
 Current installed scope:

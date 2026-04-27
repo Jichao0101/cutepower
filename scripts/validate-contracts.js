@@ -275,13 +275,21 @@ function main() {
       throw new Error(`review-boundaries missing blocked/evidence_gap outcome for ${reviewType.review_type}`);
     }
     ensureKeys(`${reviewType.review_type}.independence_requirements`, reviewType.independence_requirements, [
-      "separate_reviewer_stage_or_instance",
+      "independence_model",
+      "separate_reviewer_stage",
+      "executor_identity_separation_enforced",
       "use_minimum_evidence_package",
       "allow_full_author_context",
       "allow_full_author_reasoning"
     ]);
-    if (!reviewType.independence_requirements.separate_reviewer_stage_or_instance) {
-      throw new Error(`review-boundaries must require a separate reviewer stage/instance for ${reviewType.review_type}`);
+    if (reviewType.independence_requirements.independence_model !== "procedural") {
+      throw new Error(`review-boundaries currently support only procedural independence for ${reviewType.review_type}`);
+    }
+    if (!reviewType.independence_requirements.separate_reviewer_stage) {
+      throw new Error(`review-boundaries must require a separate reviewer stage for ${reviewType.review_type}`);
+    }
+    if (reviewType.independence_requirements.executor_identity_separation_enforced !== false) {
+      throw new Error(`review-boundaries may not claim executor identity separation enforcement for ${reviewType.review_type}`);
     }
     if (reviewType.independence_requirements.allow_full_author_context || reviewType.independence_requirements.allow_full_author_reasoning) {
       throw new Error(`review-boundaries may not allow full author context/reasoning for ${reviewType.review_type}`);

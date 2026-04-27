@@ -16,6 +16,7 @@ That means:
 - `task-intake` persists dispatcher and preflight artifacts under `.cutepower/run/<session_id>/`
 - `host-runtime` issues a session capability tied to the routed session
 - `runtime-gates` deny protected execution when capability, phase, required artifacts, or governed skill order do not match
+- review/writeback independence is procedural and authority-bounded; this runtime does not create subagents or enforce executor identity separation
 
 ## Stable preflight artifacts
 
@@ -38,6 +39,8 @@ That means:
 - read-only evidence collection constraints where applicable
 - governed skill order through `dispatch_manifest.next_skill`
 - legal terminal closure
+
+Runtime does not enforce executor identity separation for review or writeback. It enforces stage order, role/action boundaries, required artifacts, and closure legality.
 
 ## What runtime does not replace
 

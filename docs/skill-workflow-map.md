@@ -17,6 +17,8 @@ Truth still lives in:
 3. runtime gate
    Enforces capability, phase, artifact continuity, and governed skill order.
 
+Review and writeback are ordered governed stages, not automatic subagent launches. Their independence model is procedural: role boundaries, required evidence, and closure authority are constrained by contracts and runtime gates.
+
 ## Core Preflight Artifacts
 
 - `task_profile.json`

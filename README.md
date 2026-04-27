@@ -1,6 +1,6 @@
 # 1 cutepower
 
-cutepower is a plugin-first governance plugin built around skill-first workflow discipline, contracts-first truth, and runtime-gate enforcement.
+cutepower is an installable governance plugin whose architecture centers on skill-first workflow discipline, contracts-first truth, and runtime-gate enforcement.
 
 This README is the runtime-plugin overview after the plugin has been installed from `/plugins`.
 
@@ -32,6 +32,7 @@ Installation entry:
 Current scope:
 
 - active runtime assets live in the plugin
+- plugin packaging is the distribution and installation layer, not the architecture policy source
 - core governance contracts live in `contracts/`
 - skills provide workflow discipline and consume contracts instead of copying rule text
 - `AGENTS.md` and `agents/*.toml` stay as thin bridge layers
@@ -79,6 +80,8 @@ Current workflow and enforcement coverage:
 - review-stage `board_execute` is rejected and board artifact collection is separately gated
 - runtime requests reject legacy `reviewer` aliases
 - repo-reviewer, functional-reviewer, and incident-investigator stay separated by route and action gates
+- review independence is procedural and role-bounded: runtime enforces ordered review stages and required artifacts, but does not automatically create or verify a separate reviewer executor identity
+- writeback is an authority-bounded closure stage: runtime checks route level, phase, capability, and closure artifacts, but does not create a separate writeback executor
 - protected business execution, review, and writeback now require a host-issued session capability
 - ready-state execution now depends on repo-local preflight artifacts instead of session-context hints alone
 - governed skill handoff now depends on `dispatch_manifest.json`
